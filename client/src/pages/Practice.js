@@ -123,6 +123,7 @@ export default function Practice() {
   const { user } = useAuth();
 
   // LeetCode sync
+  // eslint-disable-next-line no-unused-vars
   const { solvedSlugs, syncing: lcSyncing, sync: lcSync, isSolved: isLcSolved } = useLeetCodeSync(user?.id, 0);
 
   // Problems data states

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import api from '../utils/api';
 import toast from 'react-hot-toast';
-import { ExternalLink, Link2, CheckCircle2 } from 'lucide-react';
+import { Link2, CheckCircle2 } from 'lucide-react';
 
 const DIFFS = ['easy','medium','hard'];
 const TAGS_LIST = ['Arrays','DP','Graphs','Trees','Binary Search','Greedy','Math','Strings','Segment Tree','Hashing','Bit Manipulation','Geometry'];

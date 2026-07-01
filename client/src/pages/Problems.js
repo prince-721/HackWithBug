@@ -20,6 +20,7 @@ export default function Problems() {
   const navigate = useNavigate();
 
   // LeetCode sync hook
+  // eslint-disable-next-line no-unused-vars
   const { solvedSlugs, syncing, lastSync, sync: lcSync, isSolved: isLcSolved } = useLeetCodeSync(user?.id, 0);
 
   useEffect(() => {
