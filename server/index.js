@@ -88,8 +88,8 @@ app.get('/api/health', (req, res) => res.json({ status: 'ok', time: new Date(), 
 // Serve static assets in production
 app.use(express.static(path.join(__dirname, '..', 'client', 'build')));
 
-// Catch-all route to serve React app for client-side routing
-app.get('*', (req, res, next) => {
+// Catch-all route to serve React app for client-side routing (Express 5 syntax)
+app.get('{*path}', (req, res, next) => {
   if (req.path.startsWith('/api')) {
     return next();
   }
