@@ -1,0 +1,12 @@
+{
+  "name": "hackwithbug",
+  "version": "1.0.0",
+  "description": "AI-Assisted Competitive Programming Platform",
+  "scripts": {
+    "install:all": "cd server && npm install && cd ../client && npm install",
+    "start": "node server/index.js",
+    "start:server": "cd server && node index.js",
+    "start:client": "cd client && npm start",
+    "build": "npm run install:all && cd client && npm run build"
+  }
+}

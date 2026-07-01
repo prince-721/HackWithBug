@@ -1,0 +1,98 @@
+.monkey-type-container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  background: var(--bg-card);
+  padding: 24px !important;
+}
+
+.monkey-type-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 0.5px solid var(--border);
+  padding-bottom: 12px;
+}
+
+.timer-badge {
+  background: var(--purple-light);
+  color: var(--purple-dark);
+  font-size: 14px;
+  font-weight: 700;
+  padding: 4px 12px;
+  border-radius: 12px;
+  border: 0.5px solid rgba(127,119,221,0.3);
+}
+
+.words-wrapper {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 16px;
+  background: var(--bg-main);
+  border-radius: 10px;
+  border: 0.5px solid var(--border);
+  max-height: 180px;
+  overflow-y: auto;
+  line-height: 1.8;
+  font-family: 'Fira Code', monospace;
+  font-size: 18px;
+  user-select: none;
+  cursor: text;
+}
+
+/* Words and characters styling */
+.word {
+  color: var(--text-3);
+  position: relative;
+  transition: color 0.1s ease;
+}
+
+.word.active {
+  color: var(--text-2);
+}
+
+.word.correct {
+  color: var(--teal);
+}
+
+.word.incorrect {
+  color: var(--red);
+  text-decoration: underline wave var(--red);
+}
+
+.char-correct {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.char-incorrect {
+  color: var(--red);
+  background: rgba(239, 68, 68, 0.15);
+  border-radius: 2px;
+}
+
+.extra-char {
+  text-decoration: line-through;
+}
+
+.typing-input-bar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.typing-transparent-input {
+  flex: 1;
+  font-family: inherit;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+  padding: 10px 14px !important;
+  background: var(--bg-main) !important;
+  border: 1px solid var(--border) !important;
+}
+
+.typing-transparent-input:focus {
+  border-color: var(--purple) !important;
+  box-shadow: 0 0 0 2px rgba(127,119,221,0.15) !important;
+}

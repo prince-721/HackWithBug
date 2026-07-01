@@ -1,0 +1,5 @@
+.pair-card{background:var(--bg);border:0.5px solid var(--border);border-radius:var(--radius-lg);overflow:hidden}
+.pair-header{display:flex;align-items:center;padding:12px 14px;gap:10px;cursor:pointer}
+.pair-header:hover{background:var(--bg-2)}
+.pair-users{display:flex;align-items:center;gap:8px}
+.pair-av{width:30px;height:30px;border-radius:50%;background:var(--purple-light);color:var(--purple-dark);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;flex-shrink:0}
