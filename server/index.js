@@ -63,8 +63,8 @@ app.use(morgan('dev'));
 app.use(express.json({ limit: '10mb' }));
 
 // Rate limiting
-const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 500, standardHeaders: true, legacyHeaders: false });
-const aiLimiter = rateLimit({ windowMs: 60 * 1000, max: 15, message: { error: 'Too many AI requests, slow down.' } });
+const limiter = rateLimit({ windowMs: 15 * 60 * 1000, max: 2000, standardHeaders: true, legacyHeaders: false });
+const aiLimiter = rateLimit({ windowMs: 60 * 1000, max: 30, message: { error: 'Too many AI requests, slow down.' } });
 app.use('/api/', limiter);
 app.use('/api/ai/', aiLimiter);
 

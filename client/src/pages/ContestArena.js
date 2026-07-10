@@ -179,8 +179,8 @@ export default function ContestArena() {
   const [runResult, setRunResult] = useState(null); // null, 'running', { status, outputs: [] }
   const [confetti, setConfetti] = useState([]);
 
-  // Timer states
-  const [timeLeft, setTimeLeft] = useState(7200); // default 2 hours
+  // Timer states — null until contest data is loaded to avoid race condition
+  const [timeLeft, setTimeLeft] = useState(null);
   const [isTimerPaused, setIsTimerPaused] = useState(false);
 
   // AI Assistant states
@@ -215,8 +215,13 @@ export default function ContestArena() {
   // Socket
   const socketRef = useRef(null);
 
-  // Proctoring Log Helper
+  // Proctoring Log Helper with local throttling to prevent rate limits (max once per 5 seconds per violation type)
+  const lastViolationSentRef = useRef({});
   const logViolation = useCallback(async (type, detail = '') => {
+    const now = Date.now();
+    const lastSent = lastViolationSentRef.current[type] || 0;
+    if (now - lastSent < 5000) return; // limit local rate to once every 5 seconds
+    lastViolationSentRef.current[type] = now;
     try {
       await api.post('/proctoring/log', { contestId: id, type, detail });
     } catch (e) {}
@@ -272,16 +277,20 @@ export default function ContestArena() {
       }
     };
 
-    // DevTools detection
+    // DevTools detection with visibility guard to prevent false alerts when page is hidden
     let last = Date.now();
     const devToolsTimer = setInterval(() => {
       const now = Date.now();
-      if (now - last > 200) {
+      if (document.hidden) {
+        last = now; // Reset timer when tab is hidden
+        return;
+      }
+      if (now - last > 500) { // Thicker margin to prevent false flags on lag
         logViolation('devtools', 'DevTools panel opened');
         toast.error('🚨 DevTools interface query logged!', { duration: 4000 });
       }
       last = Date.now();
-    }, 100);
+    }, 200);
 
     // Copy event
     const handleCopy = () => {
@@ -398,21 +407,22 @@ export default function ContestArena() {
     });
   };
 
-  // 4. Timer Logic
+  // 4. Timer Logic — only starts once timeLeft is initialized from API (not null)
   useEffect(() => {
-    if (isTimerPaused || !contest || (user.role === 'student' && !contest.isRegistered)) return;
+    if (isTimerPaused || !contest || timeLeft === null || (user.role === 'student' && !contest.isRegistered)) return;
     const interval = setInterval(() => {
       setTimeLeft((prev) => {
+        if (prev === null) return null;
         if (prev <= 1) {
           clearInterval(interval);
-          toast.error('Contest arena session ended.');
+          toast.error('Contest session has ended.');
           return 0;
         }
         return prev - 1;
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [isTimerPaused, contest, user.role]);
+  }, [isTimerPaused, contest, timeLeft === null, user.role]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const formatTimer = (seconds) => {
     const hrs = Math.floor(seconds / 3600);
@@ -432,6 +442,17 @@ export default function ContestArena() {
       api.get(`/leaderboard/contest/${id}`).then(r => {
         if (!r.data.hidden) setLeaderboard(r.data);
       });
+    });
+
+    // When faculty updates contest details (timing, duration), refresh and recompute timer
+    socket.on('contest-updated', () => {
+      api.get(`/contests/${id}`).then(r => {
+        setContest(r.data);
+        const end = new Date(r.data.startTime).getTime() + r.data.duration * 60000;
+        const remaining = Math.max(0, Math.floor((end - Date.now()) / 1000));
+        setTimeLeft(remaining);
+        toast('⏱ Contest timing updated by faculty', { icon: '🔔', duration: 4000 });
+      }).catch(() => {});
     });
 
     return () => {
@@ -480,13 +501,16 @@ export default function ContestArena() {
   const { solvedSlugs, syncing: lcSyncing, sync: lcSync } = useLeetCodeSync(user?.id, user?.leetcode ? 5 : 0);
 
   // When solvedSlugs changes, reload submissions/leaderboard and alert on newly solved LC problems
-  const prevSolvedCountRef = useRef(0);
+  const prevSolvedCountRef = useRef(-1);
   useEffect(() => {
     if (solvedSlugs.length > 0 && contest?.problemDetails) {
       const lcProblems = contest.problemDetails.filter(p => p.source === 'leetcode' && p.leetcodeSlug);
       const currentSolved = lcProblems.filter(p => solvedSlugs.includes(p.leetcodeSlug));
       
-      if (currentSolved.length > prevSolvedCountRef.current) {
+      if (prevSolvedCountRef.current === -1) {
+        // Initial sync check: set the ref count but don't call loadData to avoid loop
+        prevSolvedCountRef.current = currentSolved.length;
+      } else if (currentSolved.length > prevSolvedCountRef.current) {
         currentSolved.forEach(p => {
           const alreadySubmitted = submissions.some(s => (s.problemId === p.id || s.problemId?._id === p.id) && s.verdict === 'AC');
           if (!alreadySubmitted) {
@@ -494,9 +518,9 @@ export default function ContestArena() {
             triggerConfetti();
           }
         });
+        prevSolvedCountRef.current = currentSolved.length;
+        loadData();
       }
-      prevSolvedCountRef.current = currentSolved.length;
-      loadData();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [solvedSlugs, contest?.problemDetails]);
@@ -988,7 +1012,7 @@ export default function ContestArena() {
           </div>
 
           <button
-            className={`lc-timer-display lc-nav-btn ${timeLeft < 300 ? 'red' : ''}`}
+            className={`lc-timer-display lc-nav-btn ${timeLeft !== null && timeLeft < 300 ? 'red' : ''}`}
             style={{ color: 'var(--accent-amber)' }}
             onClick={() => {
               setIsTimerPaused(!isTimerPaused);
@@ -996,7 +1020,7 @@ export default function ContestArena() {
             }}
           >
             {isTimerPaused ? <Play size={12} fill="currentColor" /> : <Pause size={12} fill="currentColor" />}
-            <span style={{ marginLeft: '4px', fontSize: '12px' }}>{formatTimer(timeLeft)}</span>
+            <span style={{ marginLeft: '4px', fontSize: '12px' }}>{timeLeft === null ? '--:--:--' : formatTimer(timeLeft)}</span>
           </button>
 
           <button className="lc-nav-btn" onClick={() => loadData()}>

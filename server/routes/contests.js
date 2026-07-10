@@ -186,6 +186,11 @@ router.put('/:id', auth, facultyOnly, async (req, res) => {
   try {
     const contest = await Contest.findByIdAndUpdate(req.params.id, req.body, { new: true });
     if (!contest) return res.status(404).json({ error: 'Not found' });
+    // Notify all students in this contest room that the contest was updated (e.g. timing changes)
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`contest-${req.params.id}`).emit('contest-updated', { contestId: req.params.id });
+    }
     res.json(contest);
   } catch (e) {
     res.status(500).json({ error: e.message });
