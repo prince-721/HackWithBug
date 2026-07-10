@@ -53,7 +53,7 @@ export default function Dashboard() {
 
   if (loading) return <div className="loading-screen"><div className="spinner"/></div>;
 
-  const liveContest = contests.find(c => c.status === 'live');
+  const liveContests = contests.filter(c => c.status === 'live');
   const upcoming = contests.filter(c => c.status === 'scheduled').slice(0, 3);
   const ratingData = { labels: ['Aug','Sep','Oct','Nov','Dec','Jan','Feb','Mar','Apr','May','Jun'], datasets: [{ data: [1200,1280,1350,1310,1420,1480,1550,1620,1700,1780,user.rating], borderColor: '#7F77DD', backgroundColor: 'rgba(127,119,221,.1)', fill: true, tension: 0.4, pointBackgroundColor: '#7F77DD', pointRadius: 4 }] };
   const chartOpts = { responsive: true, plugins: { legend: { display: false } }, scales: { x: { grid: { display: false } }, y: { grid: { color: 'rgba(0,0,0,.05)' } } } };
@@ -95,16 +95,16 @@ export default function Dashboard() {
 
       {/* Main */}
       <main className="dash-main">
-        {liveContest && (
-          <div className="live-banner">
+        {liveContests.map(lc => (
+          <div className="live-banner" key={lc.id} style={{ marginBottom: '12px' }}>
             <div className="live-dot-wrap"><span className="live-dot"/> <span className="live-label">Live now</span></div>
             <div className="live-info">
-              <div className="live-title">{liveContest.title}</div>
-              <div className="live-meta">{liveContest.problemDetails?.length || 6} problems · {liveContest.participants} students</div>
+              <div className="live-title">{lc.title}</div>
+              <div className="live-meta">{lc.problemDetails?.length || 6} problems · {lc.participants} students</div>
             </div>
-            <button className="btn btn-primary" onClick={() => navigate(`/contest/${liveContest.id}`)}>Enter contest →</button>
+            <button className="btn btn-primary" onClick={() => navigate(`/contest/${lc.id}`)}>Enter contest →</button>
           </div>
-        )}
+        ))}
 
         {/* Stats */}
         <div className="stats-row">
