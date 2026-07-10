@@ -7,6 +7,18 @@ import './ContestWizard.css';
 const DIFFS = ['easy', 'medium', 'hard'];
 const TAGS_LIST = ['Arrays', 'DP', 'Graphs', 'Trees', 'Binary Search', 'Greedy', 'Math', 'Strings', 'Segment Tree', 'Hashing', 'Bit Manipulation', 'Geometry'];
 
+const toLocalDateTimeString = (dateInput) => {
+  if (!dateInput) return '';
+  const date = new Date(dateInput);
+  if (isNaN(date.getTime())) return '';
+  const yyyy = date.getFullYear();
+  const mm = String(date.getMonth() + 1).padStart(2, '0');
+  const dd = String(date.getDate()).padStart(2, '0');
+  const hh = String(date.getHours()).padStart(2, '0');
+  const min = String(date.getMinutes()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}T${hh}:${min}`;
+};
+
 export default function ContestWizard() {
   const navigate = useNavigate();
   const { id } = useParams();
@@ -94,8 +106,8 @@ export default function ContestWizard() {
             bannerUrl: c.bannerUrl || '',
             contestType: c.contestType || 'public',
             password: c.password || '',
-            startTime: c.startTime ? new Date(c.startTime).toISOString().slice(0, 16) : '',
-            endTime: c.endTime ? new Date(c.endTime).toISOString().slice(0, 16) : '',
+            startTime: toLocalDateTimeString(c.startTime),
+            endTime: toLocalDateTimeString(c.endTime),
             duration: c.duration || 120,
             maxMarks: c.maxMarks || 100,
             numProblems: c.numProblems || c.problems?.length || 3,
