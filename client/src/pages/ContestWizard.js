@@ -163,6 +163,8 @@ export default function ContestWizard() {
     try {
       const payload = {
         ...details,
+        startTime: details.startTime ? new Date(details.startTime).toISOString() : '',
+        endTime: details.endTime ? new Date(details.endTime).toISOString() : '',
         scheduleLocked: true // Lock the schedule on Next
       };
 
