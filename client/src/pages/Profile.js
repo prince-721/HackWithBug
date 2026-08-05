@@ -157,6 +157,35 @@ export default function Profile() {
     }
   };
 
+  const handleCopyLink = () => {
+    const link = window.location.href;
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(link)
+          .then(() => toast.success('📋 Profile link copied to clipboard!'))
+          .catch(() => {
+            const input = document.createElement('input');
+            input.value = link;
+            document.body.appendChild(input);
+            input.select();
+            document.execCommand('copy');
+            document.body.removeChild(input);
+            toast.success('📋 Profile link copied to clipboard!');
+          });
+      } else {
+        const input = document.createElement('input');
+        input.value = link;
+        document.body.appendChild(input);
+        input.select();
+        document.execCommand('copy');
+        document.body.removeChild(input);
+        toast.success('📋 Profile link copied to clipboard!');
+      }
+    } catch (e) {
+      toast.error('Could not copy link');
+    }
+  };
+
   if (loading) return <div className="loading-screen"><div className="spinner"/></div>;
   if (!profile) return <div className="page"><h2>User not found</h2></div>;
 
@@ -326,7 +355,9 @@ export default function Profile() {
         <div className="prof-rating-box">
           <div className="prof-rating">{profile.rating}</div>
           <div style={{fontSize:'11px',color:'var(--text-3)'}}>Rating</div>
-          {isMe && <button className="btn btn-ghost btn-sm" style={{marginTop:'8px'}} onClick={()=>navigator.clipboard?.writeText(window.location.href)}>📋 Copy link</button>}
+          <button className="btn btn-ghost btn-sm" style={{marginTop:'8px', display:'flex', alignItems:'center', gap:'4px'}} onClick={handleCopyLink}>
+            📋 Copy link
+          </button>
         </div>
       </div>
 
