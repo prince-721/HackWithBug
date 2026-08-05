@@ -14,7 +14,17 @@ export default function DevDashboard() {
   const navigate = useNavigate();
   const [contests, setContests] = useState([]);
   const [problems, setProblems] = useState([]);
+  const [leaderboard, setLeaderboard] = useState([]);
   const [allStudents, setAllStudents] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedContest, setSelectedContest] = useState(null);
+  const [aiSettings, setAiSettings] = useState({});
+  const [announcement, setAnnouncement] = useState('');
+  const [importantAnn, setImportantAnn] = useState(false);
+  const [sendingAnn, setSendingAnn] = useState(false);
+  const [showAIPanel, setShowAIPanel] = useState(false);
+  const [activeSection, setActiveSection] = useState('dashboard');
+  const [contestFilter, setContestFilter] = useState('all');
   const [studentSearch, setStudentSearch] = useState('');
   const [expandedStudentId, setExpandedStudentId] = useState(null);
 

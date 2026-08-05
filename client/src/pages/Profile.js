@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Line, Radar } from 'react-chartjs-2';
 import { Chart as ChartJS, LineElement, PointElement, LinearScale, CategoryScale, Filler, Tooltip, RadialLinearScale } from 'chart.js';
-import { ExternalLink, Settings, Code2, Trophy, Award, Activity, X, RefreshCw, Link2, CheckCircle2, ShieldCheck, AlertCircle } from 'lucide-react';
+import { ExternalLink, Settings, Code2, Trophy, Award, Activity, X, RefreshCw, Link2, CheckCircle2, AlertCircle } from 'lucide-react';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -97,7 +97,7 @@ export default function Profile() {
     setIsSyncingStats(true);
     toast.loading('Verifying platform handles & fetching live stats...', { id: 'platform-sync' });
     try {
-      const res = await api.post('/profile/sync-platforms');
+      await api.post('/profile/sync-platforms');
       toast.success('✅ Platform records verified & updated live!', { id: 'platform-sync' });
       await fetchProfile();
     } catch (err) {
