@@ -158,5 +158,76 @@ router.put('/me', auth, async (req, res) => {
   }
 });
 
-module.exports = router;
+// Faculty-only: Get all students with full details
+router.get('/all-students', auth, async (req, res) => {
+  try {
+    const reqUser = await User.findById(req.user.id);
+    if (!reqUser || (reqUser.role !== 'faculty' && reqUser.role !== 'admin')) {
+      return res.status(403).json({ error: 'Faculty access required' });
+    }
+    
+    const students = await User.find({ role: 'student' }).sort({ rating: -1 });
+    const allSubmissions = await Submission.find({}).populate('problemId', 'title difficulty tags');
+    const allContests = await Contest.find({}).sort({ startTime: -1 });
+    
+    const result = students.map((u, idx) => {
+      const userSubs = allSubmissions.filter(s => s.userId.toString() === u.id);
+      const acSubs = userSubs.filter(s => s.verdict === 'AC');
+      
+      // Contest participation
+      const contestHistory = allContests
+        .filter(c => c.status === 'ended')
+        .map(c => {
+          const cSubs = userSubs.filter(s => s.contestId && s.contestId.toString() === c.id);
+          const solved = new Set(cSubs.filter(s => s.verdict === 'AC').map(s => s.problemId?.id)).size;
+          if (solved === 0 && cSubs.length === 0) return null;
+          return {
+            contestId: c.id,
+            contestTitle: c.title,
+            date: c.startTime,
+            solved,
+            total: c.problems ? c.problems.length : 0,
+            attempted: cSubs.length
+          };
+        })
+        .filter(Boolean);
 
+      // Topic stats
+      const topicStats = {};
+      acSubs.forEach(s => {
+        const tags = s.problemId?.tags || [];
+        tags.forEach(tag => { topicStats[tag] = (topicStats[tag] || 0) + 1; });
+      });
+
+      const safe = u.toJSON();
+      delete safe.password;
+      
+      return {
+        ...safe,
+        rank: idx + 1,
+        totalSubmissions: userSubs.length,
+        acSubmissions: acSubs.length,
+        contestHistory,
+        contestsParticipated: contestHistory.length,
+        topicStats,
+        platformStats: u.platformStats || {},
+        verifiedPlatforms: u.verifiedPlatforms || [],
+        handles: {
+          codolio: u.codolio || '',
+          leetcode: u.leetcode || '',
+          codeforces: u.codeforces || '',
+          codechef: u.codechef || '',
+          github: u.github || '',
+          geeksforgeeks: u.geeksforgeeks || '',
+          hackerrank: u.hackerrank || ''
+        }
+      };
+    });
+    
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+module.exports = router;

@@ -14,20 +14,23 @@ export default function DevDashboard() {
   const navigate = useNavigate();
   const [contests, setContests] = useState([]);
   const [problems, setProblems] = useState([]);
-  const [leaderboard, setLeaderboard] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [selectedContest, setSelectedContest] = useState(null);
-  const [aiSettings, setAiSettings] = useState({});
-  const [announcement, setAnnouncement] = useState('');
-  const [importantAnn, setImportantAnn] = useState(false);
-  const [sendingAnn, setSendingAnn] = useState(false);
-  const [showAIPanel, setShowAIPanel] = useState(false);
-  const [activeSection, setActiveSection] = useState('dashboard');
-  const [contestFilter, setContestFilter] = useState('all');
+  const [allStudents, setAllStudents] = useState([]);
+  const [studentSearch, setStudentSearch] = useState('');
+  const [expandedStudentId, setExpandedStudentId] = useState(null);
 
   useEffect(() => {
-    Promise.all([api.get('/contests'), api.get('/problems'), api.get('/leaderboard')])
-      .then(([c,p,l]) => { setContests(c.data); setProblems(p.data); setLeaderboard(l.data); })
+    Promise.all([
+      api.get('/contests'),
+      api.get('/problems'),
+      api.get('/leaderboard'),
+      api.get('/profile/all-students').catch(() => ({ data: [] }))
+    ])
+      .then(([c, p, l, st]) => {
+        setContests(c.data);
+        setProblems(p.data);
+        setLeaderboard(l.data);
+        setAllStudents(st.data || []);
+      })
       .finally(() => setLoading(false));
   }, []);
 
@@ -152,6 +155,7 @@ export default function DevDashboard() {
     {
       label: 'Reports',
       items: [
+        { icon: '🎓', label: 'Student Tracker', handler: () => setActiveSection('students') },
         { icon: '🛡', label: 'Plagiarism', handler: () => navigate('/dev/plagiarism') },
         { icon: '📋', label: 'Leaderboard', handler: () => setActiveSection('leaderboard') },
         { icon: '📹', label: 'Proctor Logs', handler: () => setActiveSection('proctoring') },
@@ -526,6 +530,215 @@ export default function DevDashboard() {
               <div style={{ textAlign: 'center', padding: '8px', color: 'var(--text-3)', fontSize: '12px' }}>
                 For full logs, use the Plagiarism & Proctoring Report →
                 <Link to="/dev/plagiarism"><button className="btn btn-ghost btn-sm" style={{ marginLeft: '8px' }}>Open Report →</button></Link>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ─── FACULTY STUDENT TRACKER (CODOLIO TYPE) ─── */}
+        {activeSection === 'students' && (
+          <div>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem', flexWrap: 'wrap', gap: '12px' }}>
+              <div>
+                <h2 style={{ fontSize: '18px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  🎓 Faculty Student Tracker (Codolio Portfolio)
+                </h2>
+                <div style={{ fontSize: '12px', color: 'var(--text-3)' }}>
+                  Full academic, contest exam, and verified multi-platform coding performance for every student
+                </div>
+              </div>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <input
+                  className="inp"
+                  style={{ minWidth: '260px' }}
+                  placeholder="🔍 Search student name or enrollment..."
+                  value={studentSearch}
+                  onChange={e => setStudentSearch(e.target.value)}
+                />
+              </div>
+            </div>
+
+            {/* KPI Overview */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '1rem' }}>
+              {[
+                [allStudents.length || leaderboard.length, 'Total Students', 'Enrolled cohort', 'var(--purple)', '👥'],
+                [allStudents.filter(s => s.verifiedPlatforms && s.verifiedPlatforms.length > 0).length, 'Verified Coding Profiles', 'Codolio connected', 'var(--teal)', '📊'],
+                [allStudents.reduce((acc, s) => acc + (s.solved || 0), 0), 'Problems Solved', 'Across platforms', 'var(--amber)', '📝'],
+                [allStudents.reduce((acc, s) => acc + (s.contestsParticipated || 0), 0), 'Exam Participations', 'Faculty contests', 'var(--blue)', '🏆'],
+              ].map(([v, l, sub, color, icon]) => (
+                <div key={l} className="card card-body" style={{ borderLeft: `3px solid ${color}` }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '4px' }}>
+                    <div style={{ fontSize: '20px' }}>{icon}</div>
+                    <span style={{ fontSize: '10px', background: `${color}15`, color, padding: '2px 6px', borderRadius: '10px', fontWeight: 700 }}>{sub}</span>
+                  </div>
+                  <div style={{ fontSize: '26px', fontWeight: 800, color }}>{v}</div>
+                  <div style={{ fontSize: '12px', color: 'var(--text-3)' }}>{l}</div>
+                </div>
+              ))}
+            </div>
+
+            {/* Students Table */}
+            <div className="card">
+              <div style={{ overflowX: 'auto' }}>
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Rank</th>
+                      <th>Student</th>
+                      <th>Enrollment</th>
+                      <th>Rating</th>
+                      <th>Solved</th>
+                      <th>Contests / Exams</th>
+                      <th>Verified Platforms</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(allStudents.length > 0 ? allStudents : leaderboard)
+                      .filter(s => 
+                        !studentSearch || 
+                        s.name.toLowerCase().includes(studentSearch.toLowerCase()) || 
+                        s.enrollment.toLowerCase().includes(studentSearch.toLowerCase())
+                      )
+                      .map((student, idx) => {
+                        const isExpanded = expandedStudentId === (student.id || student._id);
+                        const verifiedPlats = student.verifiedPlatforms || [];
+                        const hasCodolio = !!student.codolio || verifiedPlats.includes('codolio');
+
+                        return (
+                          <React.Fragment key={student.id || student._id}>
+                            <tr>
+                              <td style={{ fontWeight: 700, fontSize: '13px' }}>#{student.rank || idx + 1}</td>
+                              <td>
+                                <div style={{ fontWeight: 700, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                  {student.name}
+                                  {hasCodolio && (
+                                    <span style={{ fontSize: '10px', background: 'rgba(16,185,129,0.15)', color: '#10B981', padding: '1px 5px', borderRadius: '8px', fontWeight: 700 }} title="Codolio Verified">
+                                      Codolio ✓
+                                    </span>
+                                  )}
+                                </div>
+                                <div style={{ fontSize: '11px', color: 'var(--text-3)' }}>CE Sem {student.semester || 5}</div>
+                              </td>
+                              <td style={{ fontFamily: 'var(--mono)', fontSize: '12px', color: 'var(--text-2)' }}>{student.enrollment}</td>
+                              <td style={{ fontWeight: 700, color: 'var(--purple)' }}>{student.rating || 0}</td>
+                              <td style={{ fontWeight: 600 }}>{student.solved || 0}</td>
+                              <td>
+                                <span className="badge badge-purple">
+                                  {student.contestsParticipated !== undefined ? student.contestsParticipated : (student.contests || 0)} Exams
+                                </span>
+                              </td>
+                              <td>
+                                <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+                                  {student.leetcode && <span style={{ fontSize: '10px', padding: '2px 5px', borderRadius: '4px', background: '#FFA11615', color: '#FFA116', fontWeight: 700 }}>LC</span>}
+                                  {student.codeforces && <span style={{ fontSize: '10px', padding: '2px 5px', borderRadius: '4px', background: '#3182CE15', color: '#3182CE', fontWeight: 700 }}>CF</span>}
+                                  {student.codechef && <span style={{ fontSize: '10px', padding: '2px 5px', borderRadius: '4px', background: '#9B6B4315', color: '#9B6B43', fontWeight: 700 }}>CC</span>}
+                                  {student.github && <span style={{ fontSize: '10px', padding: '2px 5px', borderRadius: '4px', background: 'var(--bg-3)', color: 'var(--text)', fontWeight: 700 }}>GH</span>}
+                                  {student.geeksforgeeks && <span style={{ fontSize: '10px', padding: '2px 5px', borderRadius: '4px', background: '#008A4515', color: '#008A45', fontWeight: 700 }}>GFG</span>}
+                                  {student.hackerrank && <span style={{ fontSize: '10px', padding: '2px 5px', borderRadius: '4px', background: '#1BA94C15', color: '#1BA94C', fontWeight: 700 }}>HR</span>}
+                                  {(!student.leetcode && !student.codeforces && !student.codechef && !student.github && !student.geeksforgeeks) && (
+                                    <span style={{ fontSize: '11px', color: 'var(--text-3)' }}>None</span>
+                                  )}
+                                </div>
+                              </td>
+                              <td style={{ display: 'flex', gap: '6px' }}>
+                                <button
+                                  className="btn btn-ghost btn-sm"
+                                  onClick={() => setExpandedStudentId(isExpanded ? null : (student.id || student._id))}
+                                >
+                                  {isExpanded ? 'Hide Details ▲' : 'Details 👇'}
+                                </button>
+                                <button
+                                  className="btn btn-primary btn-sm"
+                                  onClick={() => navigate(`/profile/${student.enrollment}`)}
+                                >
+                                  Full Profile ↗
+                                </button>
+                              </td>
+                            </tr>
+
+                            {/* Expanded Codolio Details Drawer */}
+                            {isExpanded && (
+                              <tr>
+                                <td colSpan={8} style={{ background: 'var(--bg-3)', padding: '16px', borderBottom: '2px solid var(--purple)' }}>
+                                  <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1rem' }}>
+                                    
+                                    {/* Column 1: Multi-platform Verified Stats */}
+                                    <div className="card card-body" style={{ background: 'var(--bg)' }}>
+                                      <div style={{ fontSize: '13px', fontWeight: 800, marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                                        <span>📊 Codolio Unified Platform Records</span>
+                                        <span style={{ fontSize: '11px', color: 'var(--text-3)' }}>Verified & Synced</span>
+                                      </div>
+                                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2,1fr)', gap: '8px' }}>
+                                        {[
+                                          ['Codolio', student.codolio, student.platformStats?.codolio, '#10B981'],
+                                          ['LeetCode', student.leetcode, student.platformStats?.leetcode, '#FFA116'],
+                                          ['Codeforces', student.codeforces, student.platformStats?.codeforces, '#3182CE'],
+                                          ['CodeChef', student.codechef, student.platformStats?.codechef, '#9B6B43'],
+                                          ['GitHub', student.github, student.platformStats?.github, 'var(--text)'],
+                                          ['GeeksforGeeks', student.geeksforgeeks, student.platformStats?.geeksforgeeks, '#008A45'],
+                                          ['HackerRank', student.hackerrank, student.platformStats?.hackerrank, '#1BA94C'],
+                                        ].map(([platName, handleVal, statsObj, platColor]) => (
+                                          <div key={platName} style={{ padding: '8px', borderRadius: '6px', border: '0.5px solid var(--border)', background: 'var(--bg-3)' }}>
+                                            <div style={{ fontSize: '11px', fontWeight: 700, color: platColor, display: 'flex', justifyContent: 'space-between' }}>
+                                              <span>{platName}</span>
+                                              {handleVal ? <span style={{ color: '#2cbb5d' }}>✓ Linked</span> : <span style={{ color: 'var(--text-3)' }}>Unlinked</span>}
+                                            </div>
+                                            {handleVal ? (
+                                              <div style={{ fontSize: '11px', marginTop: '4px' }}>
+                                                <div style={{ color: 'var(--text-2)', fontFamily: 'var(--mono)' }}>@{handleVal}</div>
+                                                {statsObj?.solved !== undefined && <div style={{ color: 'var(--text-3)' }}>Solved: <strong style={{ color: 'var(--text)' }}>{statsObj.solved}</strong></div>}
+                                                {statsObj?.rating !== undefined && <div style={{ color: 'var(--text-3)' }}>Rating: <strong style={{ color: platColor }}>{statsObj.rating}</strong></div>}
+                                                {statsObj?.repos !== undefined && <div style={{ color: 'var(--text-3)' }}>Repos: <strong style={{ color: 'var(--text)' }}>{statsObj.repos}</strong></div>}
+                                              </div>
+                                            ) : (
+                                              <div style={{ fontSize: '10px', color: 'var(--text-3)', marginTop: '4px' }}>Not configured</div>
+                                            )}
+                                          </div>
+                                        ))}
+                                      </div>
+                                    </div>
+
+                                    {/* Column 2: Exam & Contest History */}
+                                    <div className="card card-body" style={{ background: 'var(--bg)' }}>
+                                      <div style={{ fontSize: '13px', fontWeight: 800, marginBottom: '10px' }}>
+                                        🏆 Faculty Exam & Contest History
+                                      </div>
+                                      {student.contestHistory && student.contestHistory.length > 0 ? (
+                                        <div style={{ display: 'flex', flexDirection: 'column', gap: '6px', maxHeight: '180px', overflowY: 'auto' }}>
+                                          {student.contestHistory.map(ch => (
+                                            <div key={ch.contestId} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 8px', borderRadius: '6px', background: 'var(--bg-3)', fontSize: '11px' }}>
+                                              <div>
+                                                <div style={{ fontWeight: 700 }}>{ch.contestTitle}</div>
+                                                <div style={{ color: 'var(--text-3)' }}>{new Date(ch.date).toLocaleDateString()}</div>
+                                              </div>
+                                              <span className="badge badge-teal" style={{ fontSize: '10px' }}>
+                                                {ch.solved} / {ch.total} Solved
+                                              </span>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      ) : (
+                                        <div style={{ fontSize: '12px', color: 'var(--text-3)', padding: '12px 0' }}>
+                                          No faculty contest exams entered yet.
+                                        </div>
+                                      )}
+
+                                      <div style={{ marginTop: '12px', paddingTop: '10px', borderTop: '0.5px solid var(--border)', display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
+                                        <span>Total Submissions: <strong>{student.totalSubmissions || student.submissions || 0}</strong></span>
+                                        <span>AC Submissions: <strong style={{ color: '#2cbb5d' }}>{student.acSubmissions || 0}</strong></span>
+                                      </div>
+                                    </div>
+
+                                  </div>
+                                </td>
+                              </tr>
+                            )}
+                          </React.Fragment>
+                        );
+                      })}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
