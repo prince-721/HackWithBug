@@ -18,21 +18,27 @@ async function verifyLeetCode(handle) {
   if (!handle || !handle.trim()) return null;
   const username = handle.trim();
   try {
+    // userContestRanking is a TOP-LEVEL query field, NOT nested inside matchedUser
     const query = `
       query getUserProfile($username: String!) {
         matchedUser(username: $username) {
           username
+          profile {
+            realName
+            ranking
+          }
           submitStats {
             acSubmissionNum {
               difficulty
               count
             }
           }
-          userContestRanking {
-            rating
-            badge {
-              name
-            }
+        }
+        userContestRanking(username: $username) {
+          rating
+          globalRanking
+          badge {
+            name
           }
         }
       }
@@ -42,7 +48,8 @@ async function verifyLeetCode(handle) {
       headers: {
         'Content-Type': 'application/json',
         'Referer': 'https://leetcode.com',
-        'User-Agent': 'Mozilla/5.0'
+        'Origin': 'https://leetcode.com',
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
       },
       body: JSON.stringify({ query, variables: { username } })
     });
@@ -53,15 +60,19 @@ async function verifyLeetCode(handle) {
     const acStats = user.submitStats?.acSubmissionNum || [];
     const allStat = acStats.find(s => s.difficulty === 'All');
     const solved = allStat ? allStat.count : acStats.reduce((a, b) => a + (b.count || 0), 0);
-    const rating = Math.round(user.userContestRanking?.rating || 0);
-    const badge = user.userContestRanking?.badge?.name || (rating >= 2000 ? 'Guardian' : rating >= 1800 ? 'Knight' : 'Active');
+
+    // Contest ranking is a separate top-level field
+    const contestRanking = data?.data?.userContestRanking;
+    const rating = contestRanking ? Math.round(contestRanking.rating) : 0;
+    const badge = contestRanking?.badge?.name || (rating >= 2000 ? 'Guardian' : rating >= 1800 ? 'Knight' : 'Active');
 
     return {
       verified: true,
       handle: user.username || username,
       solved: solved || 0,
       rating: rating || '—',
-      badge
+      badge,
+      ranking: user.profile?.ranking || contestRanking?.globalRanking || '—'
     };
   } catch (e) {
     return { verified: false, error: 'Could not reach LeetCode API' };
