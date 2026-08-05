@@ -2,54 +2,32 @@
 const express = require('express');
 const { User, Submission, Contest } = require('../db');
 const { auth } = require('../middleware/auth');
+const { verifySinglePlatform, verifyAndFetchAllPlatforms } = require('../utils/platformVerifier');
 const router = express.Router();
-
-const generatePlatformStats = (user) => {
-  const stats = {};
-  const seed = user.id.charCodeAt(user.id.length - 1) * 17; // deterministic seed from mongo id
-
-  if (user.leetcode) {
-    const solved = Math.floor(80 + (seed % 150) + user.rating * 0.1);
-    const rating = Math.floor(1300 + (seed % 400) + user.rating * 0.2);
-    const badge = rating >= 1800 ? 'Knight' : rating >= 2200 ? 'Guardian' : 'Active';
-    stats.leetcode = { handle: user.leetcode, solved, rating, badge };
-  }
-  if (user.codeforces) {
-    const solved = Math.floor(60 + (seed % 120) + user.rating * 0.08);
-    const rating = Math.floor(1100 + (seed % 500) + user.rating * 0.25);
-    const rank = rating >= 1900 ? 'Candidate Master' : rating >= 1600 ? 'Expert' : rating >= 1400 ? 'Specialist' : 'Pupil';
-    stats.codeforces = { handle: user.codeforces, solved, rating, rank };
-  }
-  if (user.codechef) {
-    const solved = Math.floor(40 + (seed % 100) + user.rating * 0.05);
-    const rating = Math.floor(1300 + (seed % 400) + user.rating * 0.15);
-    const stars = rating >= 1800 ? '4-Star' : rating >= 1600 ? '3-Star' : '2-Star';
-    stats.codechef = { handle: user.codechef, solved, rating, stars };
-  }
-  if (user.github) {
-    const repos = Math.floor(5 + (seed % 18));
-    const stars = Math.floor(2 + (seed % 30));
-    const contributions = Math.floor(80 + (seed % 300));
-    stats.github = { handle: user.github, repos, stars, contributions };
-  }
-  if (user.geeksforgeeks) {
-    const solved = Math.floor(50 + (seed % 110) + user.rating * 0.06);
-    const score = Math.floor(180 + (seed % 400) + user.rating * 0.3);
-    stats.geeksforgeeks = { handle: user.geeksforgeeks, solved, score };
-  }
-  if (user.hackerrank) {
-    const stars = Math.floor(3 + (seed % 3)); // 3 to 5 stars
-    const badge = stars === 5 ? 'Gold Badge' : 'Silver Badge';
-    stats.hackerrank = { handle: user.hackerrank, stars, badge };
-  }
-  return stats;
-};
 
 router.get('/:enrollment', async (req, res) => {
   try {
     const user = await User.findOne({ enrollment: req.params.enrollment });
     if (!user) return res.status(404).json({ error: 'User not found' });
     
+    // Auto-fetch real platform stats if missing but handles exist
+    const hasHandles = !!(user.leetcode || user.codeforces || user.codechef || user.github || user.geeksforgeeks || user.hackerrank || user.codolio);
+    if (hasHandles && (!user.platformStats || Object.keys(user.platformStats).length === 0)) {
+      const handles = {
+        leetcode: user.leetcode,
+        codeforces: user.codeforces,
+        codechef: user.codechef,
+        github: user.github,
+        geeksforgeeks: user.geeksforgeeks,
+        hackerrank: user.hackerrank,
+        codolio: user.codolio
+      };
+      const { platformStats, verifiedPlatforms } = await verifyAndFetchAllPlatforms(handles);
+      user.platformStats = platformStats;
+      user.verifiedPlatforms = verifiedPlatforms;
+      await user.save();
+    }
+
     const { password, ...safe } = user.toJSON();
     
     // Get all submissions for user
@@ -81,14 +59,13 @@ router.get('/:enrollment', async (req, res) => {
       tags.forEach(tag => { topicStats[tag] = (topicStats[tag] || 0) + 1; });
     });
 
-    const platformStats = generatePlatformStats(user);
-
     res.json({ 
       ...safe, 
       submissions: submissions.length, 
       contestHistory, 
       topicStats, 
-      platformStats,
+      platformStats: user.platformStats || {},
+      verifiedPlatforms: user.verifiedPlatforms || [],
       recentSubmissions: submissions.slice(-10).reverse().map(s => {
         const json = s.toJSON();
         return {
@@ -103,26 +80,83 @@ router.get('/:enrollment', async (req, res) => {
   }
 });
 
+// Single platform live handle verification endpoint
+router.post('/verify-platform', auth, async (req, res) => {
+  try {
+    const { platform, handle } = req.body;
+    if (!platform || !handle) {
+      return res.status(400).json({ error: 'Platform and handle are required' });
+    }
+    const result = await verifySinglePlatform(platform, handle);
+    if (!result || !result.verified) {
+      return res.status(404).json({ error: result?.error || `Handle "${handle}" is invalid or not found on ${platform}` });
+    }
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Sync all platforms endpoint
+router.post('/sync-platforms', auth, async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id);
+    if (!user) return res.status(404).json({ error: 'User not found' });
+    
+    const handles = {
+      leetcode: user.leetcode,
+      codeforces: user.codeforces,
+      codechef: user.codechef,
+      github: user.github,
+      geeksforgeeks: user.geeksforgeeks,
+      hackerrank: user.hackerrank,
+      codolio: user.codolio
+    };
+    const { platformStats, verifiedPlatforms, errors } = await verifyAndFetchAllPlatforms(handles);
+    user.platformStats = platformStats;
+    user.verifiedPlatforms = verifiedPlatforms;
+    await user.save();
+    res.json({ success: true, platformStats, verifiedPlatforms, errors });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 router.put('/me', auth, async (req, res) => {
   try {
     const user = await User.findById(req.user.id);
     if (!user) return res.status(404).json({ error: 'Not found' });
     
-    const allowedFields = ['name', 'semester', 'leetcode', 'codeforces', 'codechef', 'github', 'geeksforgeeks', 'hackerrank'];
+    const allowedFields = ['name', 'semester', 'leetcode', 'codeforces', 'codechef', 'github', 'geeksforgeeks', 'hackerrank', 'codolio'];
     allowedFields.forEach(f => {
       if (req.body[f] !== undefined) {
-        user[f] = f === 'semester' ? parseInt(req.body[f]) : req.body[f];
+        user[f] = f === 'semester' ? parseInt(req.body[f]) : req.body[f].trim();
       }
     });
     
+    // Perform real platform verification and fetch stats
+    const handles = {
+      leetcode: user.leetcode,
+      codeforces: user.codeforces,
+      codechef: user.codechef,
+      github: user.github,
+      geeksforgeeks: user.geeksforgeeks,
+      hackerrank: user.hackerrank,
+      codolio: user.codolio
+    };
+    const { platformStats, verifiedPlatforms, errors } = await verifyAndFetchAllPlatforms(handles);
+    user.platformStats = platformStats;
+    user.verifiedPlatforms = verifiedPlatforms;
+
     await user.save();
     
     const safe = user.toJSON();
     delete safe.password;
-    res.json(safe);
+    res.json({ ...safe, platformStats, verifiedPlatforms, verificationErrors: errors });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
 
 module.exports = router;
+

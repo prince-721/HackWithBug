@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { Line, Radar } from 'react-chartjs-2';
 import { Chart as ChartJS, LineElement, PointElement, LinearScale, CategoryScale, Filler, Tooltip, RadialLinearScale } from 'chart.js';
-import { ExternalLink, Settings, Code2, Trophy, Award, Activity, X, RefreshCw, Link2, CheckCircle2 } from 'lucide-react';
+import { ExternalLink, Settings, Code2, Trophy, Award, Activity, X, RefreshCw, Link2, CheckCircle2, ShieldCheck, AlertCircle } from 'lucide-react';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
@@ -44,7 +44,12 @@ export default function Profile() {
   const [profile, setProfile] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
+  const [isSyncingStats, setIsSyncingStats] = useState(false);
+  const [isSavingHandles, setIsSavingHandles] = useState(false);
+  const [verifyingPlatform, setVerifyingPlatform] = useState({});
+
   const [handles, setHandles] = useState({
+    codolio: '',
     leetcode: '',
     codeforces: '',
     codechef: '',
@@ -60,25 +65,64 @@ export default function Profile() {
   const [lcSolvedCount, setLcSolvedCount] = useState(0);
   const [lcSyncedAt, setLcSyncedAt] = useState(null);
 
+  const fetchProfile = async () => {
+    try {
+      const r = await api.get(`/profile/${enrollment}`);
+      setProfile(r.data);
+      setHandles({
+        codolio: r.data.codolio || '',
+        leetcode: r.data.leetcode || '',
+        codeforces: r.data.codeforces || '',
+        codechef: r.data.codechef || '',
+        github: r.data.github || '',
+        geeksforgeeks: r.data.geeksforgeeks || '',
+        hackerrank: r.data.hackerrank || ''
+      });
+      setLcInput(r.data.leetcode || '');
+      setLcSolvedCount((r.data.leetcodeSolved || []).length);
+      setLcSyncedAt(r.data.leetcodeSyncedAt ? new Date(r.data.leetcodeSyncedAt) : null);
+    } catch (e) {
+      setProfile(null);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    api.get(`/profile/${enrollment}`)
-      .then(r => {
-        setProfile(r.data);
-        setHandles({
-          leetcode: r.data.leetcode || '',
-          codeforces: r.data.codeforces || '',
-          codechef: r.data.codechef || '',
-          github: r.data.github || '',
-          geeksforgeeks: r.data.geeksforgeeks || '',
-          hackerrank: r.data.hackerrank || ''
-        });
-        setLcInput(r.data.leetcode || '');
-        setLcSolvedCount((r.data.leetcodeSolved || []).length);
-        setLcSyncedAt(r.data.leetcodeSyncedAt ? new Date(r.data.leetcodeSyncedAt) : null);
-      })
-      .catch(() => setProfile(null))
-      .finally(() => setLoading(false));
+    fetchProfile();
   }, [enrollment]);
+
+  // Sync / Refresh all platform records live
+  const handleSyncAllPlatforms = async () => {
+    setIsSyncingStats(true);
+    toast.loading('Verifying platform handles & fetching live stats...', { id: 'platform-sync' });
+    try {
+      const res = await api.post('/profile/sync-platforms');
+      toast.success('✅ Platform records verified & updated live!', { id: 'platform-sync' });
+      await fetchProfile();
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Failed to sync platform records', { id: 'platform-sync' });
+    } finally {
+      setIsSyncingStats(false);
+    }
+  };
+
+  // Verify single handle in modal
+  const handleVerifySingle = async (platform) => {
+    const handleVal = handles[platform];
+    if (!handleVal || !handleVal.trim()) {
+      return toast.error(`Enter a ${platform} username first`);
+    }
+    setVerifyingPlatform(prev => ({ ...prev, [platform]: 'verifying' }));
+    try {
+      const res = await api.post('/profile/verify-platform', { platform, handle: handleVal });
+      setVerifyingPlatform(prev => ({ ...prev, [platform]: 'verified' }));
+      toast.success(`✅ ${platform} verified: @${res.handle}`);
+    } catch (err) {
+      setVerifyingPlatform(prev => ({ ...prev, [platform]: 'failed' }));
+      toast.error(err.response?.data?.error || `Invalid ${platform} handle`);
+    }
+  };
 
   // LeetCode connect handler
   const handleLcConnect = async () => {
@@ -88,9 +132,7 @@ export default function Profile() {
       const r = await api.post('/leetcode/connect', { leetcodeUsername: lcInput.trim() });
       toast.success(`✅ Connected as ${r.data.leetcodeUsername} (${r.data.totalSolved} solved)`);
       setLcSolvedCount(r.data.totalSolved);
-      // Refresh profile
-      const updated = await api.get(`/profile/${enrollment}`);
-      setProfile(updated.data);
+      await fetchProfile();
       setHandles(h => ({ ...h, leetcode: r.data.leetcodeUsername }));
     } catch (err) {
       toast.error(err.response?.data?.error || 'Connection failed');
@@ -120,13 +162,22 @@ export default function Profile() {
 
   const saveHandles = async (e) => {
     e.preventDefault();
+    setIsSavingHandles(true);
+    toast.loading('Verifying platform handles & fetching accurate records...', { id: 'save-handles' });
     try {
-      await api.put('/profile/me', handles);
+      const res = await api.put('/profile/me', handles);
+      toast.success('✅ Coding profiles verified & saved!', { id: 'save-handles' });
+      if (res.data.verificationErrors && Object.keys(res.data.verificationErrors).length > 0) {
+        Object.entries(res.data.verificationErrors).forEach(([plat, errMsg]) => {
+          toast.error(`⚠️ ${plat}: ${errMsg}`, { duration: 6000 });
+        });
+      }
       setIsEditModalOpen(false);
-      const updated = await api.get(`/profile/${enrollment}`);
-      setProfile(updated.data);
+      await fetchProfile();
     } catch (err) {
-      console.error(err);
+      toast.error(err.response?.data?.error || 'Failed to update profiles', { id: 'save-handles' });
+    } finally {
+      setIsSavingHandles(false);
     }
   };
 
@@ -142,10 +193,8 @@ export default function Profile() {
       borderColor:'#7F77DD', 
       backgroundColor:'rgba(127,119,221,.1)', 
       fill:true, 
-      tension:0.4, 
-      pointBackgroundColor:'#7F77DD', 
-      pointRadius:4 
-    }]
+      tension:0.4 
+    }] 
   };
 
   const topics = Object.entries(profile.topicStats || {}).slice(0, 8);
@@ -163,47 +212,89 @@ export default function Profile() {
   const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
   const isMe = me?.enrollment === enrollment;
 
-  // Calculate Aggregated Coding Stats
+  // Calculate Aggregated Coding Stats from Verified Records
   const getAggregateStats = () => {
     let totalSolved = profile.solved || 0;
     if (profile.platformStats) {
       const p = profile.platformStats;
-      if (p.leetcode?.solved) totalSolved += p.leetcode.solved;
-      if (p.codeforces?.solved) totalSolved += p.codeforces.solved;
-      if (p.codechef?.solved) totalSolved += p.codechef.solved;
-      if (p.geeksforgeeks?.solved) totalSolved += p.geeksforgeeks.solved;
+      if (p.leetcode?.solved && typeof p.leetcode.solved === 'number') totalSolved += p.leetcode.solved;
+      if (p.codeforces?.solved && typeof p.codeforces.solved === 'number') totalSolved += p.codeforces.solved;
+      if (p.codechef?.solved && typeof p.codechef.solved === 'number') totalSolved += p.codechef.solved;
+      if (p.geeksforgeeks?.solved && typeof p.geeksforgeeks.solved === 'number') totalSolved += p.geeksforgeeks.solved;
     }
     return { totalSolved };
   };
   const { totalSolved } = getAggregateStats();
 
   const renderPlatformCards = () => {
+    const verifiedList = profile.verifiedPlatforms || [];
     const platforms = [
-      { id: 'leetcode', name: 'LeetCode', color: '#FFA116', url: (h) => `https://leetcode.com/${h}`, stats: profile.platformStats?.leetcode, icon: <Award size={18} color="#FFA116" /> },
-      { id: 'codeforces', name: 'Codeforces', color: '#3182CE', url: (h) => `https://codeforces.com/profile/${h}`, stats: profile.platformStats?.codeforces, icon: <Activity size={18} color="#3182CE" /> },
-      { id: 'codechef', name: 'CodeChef', color: '#9B6B43', url: (h) => `https://www.codechef.com/users/${h}`, stats: profile.platformStats?.codechef, icon: <Trophy size={18} color="#9B6B43" /> },
-      { id: 'github', name: 'GitHub', color: '#2D3748', url: (h) => `https://github.com/${h}`, stats: profile.platformStats?.github, icon: <Github size={18} color="var(--text)" /> },
-      { id: 'geeksforgeeks', name: 'GeeksforGeeks', color: '#008A45', url: (h) => `https://auth.geeksforgeeks.org/user/${h}/profile`, stats: profile.platformStats?.geeksforgeeks, icon: <Code2 size={18} color="#008A45" /> },
-      { id: 'hackerrank', name: 'HackerRank', color: '#1BA94C', url: (h) => `https://www.hackerrank.com/${h}`, stats: profile.platformStats?.hackerrank, icon: <Award size={18} color="#1BA94C" /> }
+      { id: 'codolio', name: 'Codolio Portfolio', color: '#10B981', handle: profile.codolio, url: (h) => `https://codolio.com/profile/${h}`, stats: profile.platformStats?.codolio, icon: <Activity size={18} color="#10B981" /> },
+      { id: 'leetcode', name: 'LeetCode', color: '#FFA116', handle: profile.leetcode, url: (h) => `https://leetcode.com/${h}`, stats: profile.platformStats?.leetcode, icon: <Award size={18} color="#FFA116" /> },
+      { id: 'codeforces', name: 'Codeforces', color: '#3182CE', handle: profile.codeforces, url: (h) => `https://codeforces.com/profile/${h}`, stats: profile.platformStats?.codeforces, icon: <Activity size={18} color="#3182CE" /> },
+      { id: 'codechef', name: 'CodeChef', color: '#9B6B43', handle: profile.codechef, url: (h) => `https://www.codechef.com/users/${h}`, stats: profile.platformStats?.codechef, icon: <Trophy size={18} color="#9B6B43" /> },
+      { id: 'github', name: 'GitHub', color: '#2D3748', handle: profile.github, url: (h) => `https://github.com/${h}`, stats: profile.platformStats?.github, icon: <Github size={18} color="var(--text)" /> },
+      { id: 'geeksforgeeks', name: 'GeeksforGeeks', color: '#008A45', handle: profile.geeksforgeeks, url: (h) => `https://auth.geeksforgeeks.org/user/${h}/profile`, stats: profile.platformStats?.geeksforgeeks, icon: <Code2 size={18} color="#008A45" /> },
+      { id: 'hackerrank', name: 'HackerRank', color: '#1BA94C', handle: profile.hackerrank, url: (h) => `https://www.hackerrank.com/${h}`, stats: profile.platformStats?.hackerrank, icon: <Award size={18} color="#1BA94C" /> }
     ];
 
     return (
       <div className="platforms-grid">
         {platforms.map(p => {
-          const isLinked = !!p.stats;
+          const isLinked = !!p.handle;
+          const isVerified = verifiedList.includes(p.id) || (p.stats && p.stats.verified);
+          const handleName = p.stats?.handle || p.handle;
+
           return (
-            <div key={p.id} className={`platform-card ${isLinked ? 'linked' : 'unlinked'}`}>
+            <div key={p.id} className={`platform-card ${isVerified ? 'linked' : isLinked ? 'unverified' : 'unlinked'}`} style={{ borderLeft: `4px solid ${p.color}` }}>
               <div className="platform-card-header">
-                <div className="platform-icon-wrap">{p.icon}</div>
-                <span className="platform-name">{p.name}</span>
-                {isLinked && <a href={p.url(p.stats.handle)} target="_blank" rel="noopener noreferrer"><ExternalLink size={12} /></a>}
+                <div className="platform-icon-wrap" style={{ background: `${p.color}15` }}>{p.icon}</div>
+                <div style={{ flex: 1 }}>
+                  <div className="platform-name" style={{ fontSize: '13px', fontWeight: 800 }}>{p.name}</div>
+                  {isVerified ? (
+                    <span style={{ fontSize: '10px', background: 'rgba(44,187,93,0.15)', color: '#2cbb5d', border: '0.5px solid rgba(44,187,93,0.3)', padding: '1px 6px', borderRadius: '10px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: '3px' }}>
+                      <CheckCircle2 size={10} /> Verified
+                    </span>
+                  ) : isLinked ? (
+                    <span style={{ fontSize: '10px', background: 'rgba(255,161,22,0.15)', color: '#FFA116', border: '0.5px solid rgba(255,161,22,0.3)', padding: '1px 6px', borderRadius: '10px', fontWeight: 600 }}>
+                      Linked
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: '10px', background: 'var(--bg-3)', color: 'var(--text-3)', padding: '1px 6px', borderRadius: '10px' }}>
+                      Not Linked
+                    </span>
+                  )}
+                </div>
+                {isLinked && <a href={p.url(handleName)} target="_blank" rel="noopener noreferrer" className="platform-link-btn" title="View Public Profile"><ExternalLink size={12} /></a>}
               </div>
               <div className="platform-card-body">
                 {isLinked ? (
                   <div className="platform-info-list">
-                    <div className="platform-handle-display">@{p.stats.handle}</div>
-                    <div className="platform-stat-row"><span className="stat-name">Solved:</span><span className="stat-value">{p.stats.solved || '—'}</span></div>
-                    <div className="platform-stat-row"><span className="stat-name">Rating:</span><span className="stat-value">{p.stats.rating || '—'}</span></div>
+                    <div className="platform-handle-display">@{handleName}</div>
+                    {p.id === 'codolio' && (
+                      <div className="platform-stat-row"><span className="stat-name">Portfolio:</span><span className="stat-value" style={{ color: '#10B981', fontWeight: 700 }}>Connected</span></div>
+                    )}
+                    {p.stats?.solved !== undefined && (
+                      <div className="platform-stat-row"><span className="stat-name">Solved:</span><span className="stat-value">{p.stats.solved}</span></div>
+                    )}
+                    {p.stats?.rating !== undefined && (
+                      <div className="platform-stat-row"><span className="stat-name">Rating:</span><span className="stat-value">{p.stats.rating}</span></div>
+                    )}
+                    {p.stats?.badge && (
+                      <div className="platform-stat-row"><span className="stat-name">Badge:</span><span className="stat-value" style={{ color: p.color, fontWeight: 700 }}>{p.stats.badge}</span></div>
+                    )}
+                    {p.stats?.rank && (
+                      <div className="platform-stat-row"><span className="stat-name">Rank:</span><span className="stat-value" style={{ color: p.color, fontWeight: 700 }}>{p.stats.rank}</span></div>
+                    )}
+                    {p.stats?.stars && (
+                      <div className="platform-stat-row"><span className="stat-name">Stars:</span><span className="stat-value" style={{ color: p.color, fontWeight: 700 }}>{p.stats.stars}</span></div>
+                    )}
+                    {p.stats?.repos !== undefined && (
+                      <div className="platform-stat-row"><span className="stat-name">Repos:</span><span className="stat-value">{p.stats.repos}</span></div>
+                    )}
+                    {p.stats?.score !== undefined && (
+                      <div className="platform-stat-row"><span className="stat-name">Score:</span><span className="stat-value">{p.stats.score}</span></div>
+                    )}
                   </div>
                 ) : <div className="platform-not-linked">Not Linked</div>}
               </div>
@@ -255,7 +346,7 @@ export default function Profile() {
 
       {/* STATS */}
       <div className="prof-stats-row">
-        {[[profile.rating,'Rating','▲ +124 this month','var(--purple)'],[totalSolved,'Total Solved','Across platforms','var(--text)'],[`#${profile.rank||'—'}`,'College rank',`Top ${profile.rank ? Math.round(profile.rank/12)+0.1+'%' : '—'}`,'var(--teal)'],[profile.contests,'Contests','entered','var(--text)'],[profile.submissions,'Submissions','total','var(--text-3)']].map(([v,l,s,c])=>(
+        {[[profile.rating,'Rating','▲ +124 this month','var(--purple)'],[totalSolved,'Total Solved','Across verified platforms','var(--text)'],[`#${profile.rank||'—'}`,'College rank',`Top ${profile.rank ? Math.round(profile.rank/12)+0.1+'%' : '—'}`,'var(--teal)'],[profile.contests,'Contests','entered','var(--text)'],[profile.submissions,'Submissions','total','var(--text-3)']].map(([v,l,s,c])=>(
           <div key={l} className="stat-card"><div className="stat-val" style={{color:c}}>{v}</div><div className="stat-label">{l}</div><div className="stat-sub">{s}</div></div>
         ))}
       </div>
@@ -266,11 +357,24 @@ export default function Profile() {
           <div style={{display:'flex', alignItems:'center', gap:'10px'}}>
             <span style={{fontSize:'22px'}}>📊</span>
             <div>
-              <div className="card-title" style={{fontSize:'15px', fontWeight:800}}>Codolio Portfolio Tracker</div>
-              <div style={{fontSize:'11px', color:'var(--text-3)'}}>Unified profile stats across coding platforms</div>
+              <div className="card-title" style={{fontSize:'15px', fontWeight:800, display:'flex', alignItems:'center', gap:'6px'}}>
+                Codolio Portfolio Tracker
+                {profile.codolio && (
+                  <span style={{fontSize:'11px', background:'rgba(16,185,129,0.15)', color:'#10B981', padding:'2px 8px', borderRadius:'12px', fontWeight:700, border:'0.5px solid rgba(16,185,129,0.3)', display:'inline-flex', alignItems:'center', gap:'4px'}}>
+                    <CheckCircle2 size={12} /> Codolio Verified
+                  </span>
+                )}
+              </div>
+              <div style={{fontSize:'11px', color:'var(--text-3)'}}>Accurate verified records across coding platforms</div>
             </div>
           </div>
-          {isMe && <button className="btn btn-ghost btn-sm" onClick={() => setIsEditModalOpen(true)}><Settings size={14} /> Manage Platforms</button>}
+          <div style={{display:'flex', gap:'8px'}}>
+            <button className="btn btn-ghost btn-sm" onClick={handleSyncAllPlatforms} disabled={isSyncingStats} style={{display:'flex', alignItems:'center', gap:'4px'}}>
+              <RefreshCw size={13} className={isSyncingStats ? 'animate-spin' : ''} />
+              {isSyncingStats ? 'Syncing...' : 'Sync Records'}
+            </button>
+            {isMe && <button className="btn btn-ghost btn-sm" onClick={() => setIsEditModalOpen(true)}><Settings size={14} /> Manage Handles</button>}
+          </div>
         </div>
         <div className="card-body">
           {renderPlatformCards()}
@@ -292,7 +396,7 @@ export default function Profile() {
           <div className="card-body" style={{padding:'16px'}}>
             {profile.leetcode ? (
               /* Connected State */
-              <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:'12px'}}>
+              <div style={{display:'flex',alignItems:'center',justifyWith:'space-between',flexWrap:'wrap',gap:'12px'}}>
                 <div style={{display:'flex',alignItems:'center',gap:'12px'}}>
                   <CheckCircle2 size={20} color="#2cbb5d" />
                   <div>
@@ -423,26 +527,64 @@ export default function Profile() {
       {/* EDIT HANDLES MODAL */}
       {isEditModalOpen && (
         <div className="modal-overlay">
-          <div className="modal-content">
+          <div className="modal-content" style={{ maxWidth: '520px' }}>
             <div className="modal-header">
-              <h3 style={{fontWeight:800, fontSize:'16px'}}>Manage Coding Profiles</h3>
+              <div>
+                <h3 style={{fontWeight:800, fontSize:'16px'}}>Manage Coding Profiles</h3>
+                <div style={{fontSize:'11px', color:'var(--text-3)'}}>Handles are verified live with platform APIs for accurate records.</div>
+              </div>
               <button className="btn-close" onClick={() => setIsEditModalOpen(false)}><X size={18} /></button>
             </div>
             <form onSubmit={saveHandles}>
-              <div className="modal-body">
-                <p style={{fontSize:'12px', color:'var(--text-3)', marginBottom:'12px'}}>
-                  Enter your handles to sync stats directly into your Hackwithbug dashboard.
-                </p>
-                {Object.keys(handles).map(k => (
-                  <div key={k} className="form-group" style={{marginBottom:'10px'}}>
-                    <label style={{display:'block', marginBottom:'4px', fontSize:'12px', fontWeight:600}}>{k.charAt(0).toUpperCase() + k.slice(1)} Handle</label>
-                    <input className="inp" value={handles[k]} onChange={e => setHandles({...handles, [k]: e.target.value})} placeholder="Username" />
-                  </div>
-                ))}
+              <div className="modal-body" style={{ maxHeight: '65vh', overflowY: 'auto' }}>
+                {Object.keys(handles).map(k => {
+                  const status = verifyingPlatform[k];
+                  const displayName = k === 'codolio' ? 'Codolio Profile' : k.charAt(0).toUpperCase() + k.slice(1);
+                  return (
+                    <div key={k} className="form-group" style={{marginBottom:'12px'}}>
+                      <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'4px'}}>
+                        <label style={{fontSize:'12px', fontWeight:600}}>{displayName} Username</label>
+                        {status === 'verified' && (
+                          <span style={{fontSize:'11px', color:'#2cbb5d', fontWeight:700, display:'inline-flex', alignItems:'center', gap:'2px'}}>
+                            <CheckCircle2 size={12}/> Verified
+                          </span>
+                        )}
+                        {status === 'failed' && (
+                          <span style={{fontSize:'11px', color:'#ef4444', fontWeight:700, display:'inline-flex', alignItems:'center', gap:'2px'}}>
+                            <AlertCircle size={12}/> Invalid
+                          </span>
+                        )}
+                      </div>
+                      <div style={{display:'flex', gap:'6px'}}>
+                        <input
+                          className="inp"
+                          style={{flex:1}}
+                          value={handles[k]}
+                          onChange={e => {
+                            setHandles({...handles, [k]: e.target.value});
+                            setVerifyingPlatform({...verifyingPlatform, [k]: null});
+                          }}
+                          placeholder={`Enter ${k} username`}
+                        />
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          style={{whiteSpace:'nowrap', fontSize:'11px'}}
+                          disabled={!handles[k] || status === 'verifying'}
+                          onClick={() => handleVerifySingle(k)}
+                        >
+                          {status === 'verifying' ? 'Verifying...' : 'Verify'}
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
               <div className="modal-footer" style={{display:'flex', gap:'8px', justifyContent:'flex-end', marginTop:'12px'}}>
                 <button type="button" className="btn btn-ghost" onClick={() => setIsEditModalOpen(false)}>Cancel</button>
-                <button type="submit" className="btn btn-primary">Save Profiles</button>
+                <button type="submit" className="btn btn-primary" disabled={isSavingHandles}>
+                  {isSavingHandles ? 'Verifying & Saving...' : 'Verify & Save Profiles'}
+                </button>
               </div>
             </form>
           </div>
