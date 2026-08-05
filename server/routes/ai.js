@@ -1,12 +1,19 @@
 const express = require('express');
-const Groq = require('groq-sdk');
 const { auth } = require('../middleware/auth');
 const { Problem, Contest } = require('../db');
 const router = express.Router();
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+// Gracefully handle missing GROQ_API_KEY — server won't crash, AI routes will return error
+let groq = null;
+if (process.env.GROQ_API_KEY) {
+  const Groq = require('groq-sdk');
+  groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+} else {
+  console.warn('⚠️ GROQ_API_KEY not set — AI features will be disabled.');
+}
 
 const callGroq = async (systemPrompt, userPrompt, maxTokens = 1024) => {
+  if (!groq) throw new Error('AI features are disabled. GROQ_API_KEY is not configured.');
   const completion = await groq.chat.completions.create({
     messages: [
       { role: 'system', content: systemPrompt },
