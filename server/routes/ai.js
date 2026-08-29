@@ -12,19 +12,49 @@ if (process.env.GROQ_API_KEY) {
   console.warn('⚠️ GROQ_API_KEY not set — AI features will be disabled.');
 }
 
-const callGroq = async (systemPrompt, userPrompt, maxTokens = 1024) => {
-  if (!groq) throw new Error('AI features are disabled. GROQ_API_KEY is not configured.');
-  const completion = await groq.chat.completions.create({
-    messages: [
-      { role: 'system', content: systemPrompt },
-      { role: 'user', content: userPrompt }
-    ],
-    model: 'llama-3.3-70b-versatile',
-    max_tokens: maxTokens,
-    temperature: 0.7,
-  });
-  return completion.choices[0]?.message?.content || '';
+// Candidate AI models supported by Groq in order of priority
+const CANDIDATE_MODELS = [
+  'openai/gpt-oss-120b',
+  'openai/gpt-oss-20b',
+  'qwen/qwen3.8-27b',
+  'qwen/qwen3.6-27b',
+  'groq/compound',
+  'groq/compound-mini'
+];
+
+// Dynamic Groq caller helper with multi-model fallback
+const callGroq = async (systemPrompt, userPrompt, maxTokens = 2048, temperature = 0.4) => {
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) throw new Error('AI features are disabled. GROQ_API_KEY is not configured.');
+  const { Groq } = require('groq-sdk');
+  const groqClient = new Groq({ apiKey });
+
+  const messages = [
+    { role: 'system', content: systemPrompt },
+    { role: 'user', content: userPrompt }
+  ];
+
+  let lastError = null;
+  for (const model of CANDIDATE_MODELS) {
+    try {
+      const completion = await groqClient.chat.completions.create({
+        messages,
+        model,
+        max_tokens: maxTokens,
+        temperature,
+      });
+      const content = completion.choices[0]?.message?.content;
+      if (content) return content;
+    } catch (err) {
+      lastError = err;
+      console.warn(`Groq model ${model} failed (${err.message}), trying next fallback...`);
+    }
+  }
+
+  throw lastError || new Error('AI generation unavailable across all models.');
 };
+
+
 
 // Check AI Consent middleware
 const checkAIConsent = async (req, res, next) => {
@@ -102,66 +132,87 @@ Give specific feedback about why this code gets ${verdict} and how to fix it.`;
   }
 });
 
-// POST /api/ai/generate-problem — Generate problem statement
+// POST /api/ai/generate-problem — Generate problem statement and test cases
 router.post('/generate-problem', auth, async (req, res) => {
   try {
-    const { topic, difficulty, constraints, storyBased, expectedAlgorithm, timeComplexity } = req.body;
+    const { prompt: userIdea, topic, difficulty, tags, constraints, storyBased, expectedAlgorithm, timeComplexity } = req.body;
 
-    const system = `You are an expert competitive programming problem setter for hackwithbug.
+    const chosenTopic = topic || (Array.isArray(tags) ? tags.join(', ') : tags) || 'Algorithms & Data Structures';
+    const chosenDiff = difficulty || 'medium';
+
+    const system = `You are an expert competitive programming problem setter and test case generator for hackwithbug.
 Generate a complete, high-quality competitive programming problem with solutions and test cases.
-Always respond in valid JSON format only, no markdown fences outside the JSON.`;
+Always respond in strictly valid JSON format only without markdown fences.`;
 
-    const userPrompt = `Generate a competitive programming problem with these preferences:
-Topic: ${topic || 'Arrays'}
-Difficulty: ${difficulty || 'medium'}
+    const userPrompt = `Generate a complete competitive programming problem with these preferences:
+${userIdea ? `Problem Idea / Requirements: ${userIdea}` : ''}
+Topic: ${chosenTopic}
+Difficulty: ${chosenDiff}
 Constraints: ${constraints || '1 <= n <= 10^5'}
 Story-based: ${storyBased ? 'Yes' : 'No'}
-Expected Algorithm: ${expectedAlgorithm || 'Greedy'}
-Expected Time Complexity: ${timeComplexity || 'O(N log N)'}
+Expected Algorithm: ${expectedAlgorithm || 'Optimal DSA (Greedy / DP / Graphs / Two Ptrs / Hashing)'}
+Expected Time Complexity: ${timeComplexity || 'O(N) or O(N log N)'}
 
 Respond with this exact JSON structure:
 {
-  "title": "Problem Title",
-  "statement": "Full problem statement with context",
-  "inputFormat": "Input format description",
-  "outputFormat": "Output format description",
-  "constraints": "Mathematical constraints",
-  "sampleInput": "sample input",
-  "sampleOutput": "sample output",
-  "explanation": "Explanation of sample test case",
-  "editorial": "Approach hint / explanation",
-  "optimalAlgorithm": "Algorithm description and time complexity",
+  "title": "Clear Problem Title",
+  "statement": "Detailed problem description with constraints and mathematical formulation",
+  "inputFormat": "Exact description of standard input structure",
+  "outputFormat": "Exact description of standard output format",
+  "constraints": "Exact mathematical constraints (e.g. 1 <= N <= 10^5, 0 <= A[i] <= 10^9)",
+  "sampleInput": "Raw exact sample input 1",
+  "sampleOutput": "Raw exact sample output 1",
+  "explanation": "Step by step explanation of sample test case",
+  "editorial": "Approach and algorithmic insight",
+  "optimalAlgorithm": "Time & space complexity explanation",
   "timeLimit": 1.0,
   "memoryLimit": 256,
-  "tags": ["tag1", "tag2"],
+  "tags": ["Array", "Greedy"],
+  "testCases": [
+    { "type": "sample", "input": "sample input 1", "output": "sample output 1" },
+    { "type": "sample", "input": "sample input 2", "output": "sample output 2" },
+    { "type": "hidden", "input": "hidden input 1", "output": "hidden output 1" },
+    { "type": "hidden", "input": "hidden input 2", "output": "hidden output 2" },
+    { "type": "hidden", "input": "hidden input 3", "output": "hidden output 3" }
+  ],
   "hiddenTestCases": [
     { "input": "hidden input 1", "output": "hidden output 1" },
     { "input": "hidden input 2", "output": "hidden output 2" }
   ],
-  "boundaryCases": [
-    { "input": "boundary input 1", "output": "boundary output 1" }
-  ],
-  "stressCases": [
-    { "input": "stress input 1", "output": "stress output 1" }
-  ],
-  "cppSolution": "C++ source code",
-  "javaSolution": "Java source code",
-  "pythonSolution": "Python source code",
-  "jsSolution": "JavaScript source code"
+  "cppSolution": "C++ source code solution",
+  "javaSolution": "Java source code solution",
+  "pythonSolution": "Python source code solution"
 }`;
 
-    const raw = await callGroq(system, userPrompt, 3000);
+    const raw = await callGroq(system, userPrompt, 2800);
     let problem;
     try {
-      problem = JSON.parse(raw.replace(/```json|```/g, '').trim());
+      const cleaned = raw.replace(/```json|```/g, '').trim();
+      problem = JSON.parse(cleaned);
+      if (!problem.testCases && problem.hiddenTestCases) {
+        problem.testCases = [
+          { type: 'sample', input: problem.sampleInput || '', output: problem.sampleOutput || '' },
+          ...problem.hiddenTestCases.map(tc => ({ type: 'hidden', ...tc }))
+        ];
+      }
     } catch {
-      problem = { title: 'Generated Problem', statement: raw, editorial: '', tags: [] };
+      problem = { 
+        title: 'Generated Problem', 
+        statement: raw, 
+        editorial: '', 
+        tags: [chosenTopic],
+        sampleInput: '1 2 3',
+        sampleOutput: '3 2 1',
+        testCases: [{ type: 'sample', input: '1 2 3', output: '3 2 1' }]
+      };
     }
     res.json(problem);
   } catch (e) {
+    console.error('generate-problem error:', e.message);
     res.status(500).json({ error: 'Problem generation failed: ' + e.message });
   }
 });
+
 
 // POST /api/ai/validate-problem — Validate CP problem details
 router.post('/validate-problem', auth, async (req, res) => {
@@ -312,20 +363,18 @@ router.post('/chat', auth, checkAIConsent, async (req, res) => {
     const system = `You are hackwithbug's AI assistant for competitive programming. Help with hints, concepts. Never give full solutions.
 ${problem ? `Current problem context: ${problem.title} - ${problem.statement}` : ''}`;
 
-    const completion = await groq.chat.completions.create({
-      messages: [
-        { role: 'system', content: system },
-        ...messages.slice(-10)
-      ],
-      model: 'llama-3.3-70b-versatile',
-      max_tokens: 600,
-      temperature: 0.8,
-    });
+    const reply = await callGroq(
+      system,
+      messages[messages.length - 1]?.content || 'Hello',
+      600,
+      0.7
+    );
 
-    res.json({ message: completion.choices[0]?.message?.content || 'I\'m unable to respond right now.' });
+    res.json({ message: reply || 'I\'m unable to respond right now.' });
   } catch (e) {
     res.status(500).json({ error: 'Chat unavailable', message: 'AI chat is temporarily unavailable.' });
   }
 });
+
 
 module.exports = router;

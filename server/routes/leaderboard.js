@@ -18,7 +18,10 @@ router.get('/', async (req, res) => {
       rating: u.rating,
       solved: u.solved,
       contests: u.contests,
-      streak: u.streak
+      streak: u.streak,
+      academicStatus: u.academicStatus || 'good',
+      academicWarningCount: u.academicWarningCount || 0,
+      flaggedReason: u.flaggedReason || ''
     }));
     
     res.json(board);

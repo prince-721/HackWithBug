@@ -90,7 +90,9 @@ export default function Profile() {
 
   useEffect(() => {
     fetchProfile();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enrollment]);
+
 
   // Sync / Refresh all platform records live
   const handleSyncAllPlatforms = async () => {
@@ -337,14 +339,65 @@ export default function Profile() {
   return (
     <div className="page">
       {/* HERO */}
-      <div className="prof-hero">
+      <div className="prof-hero" style={{ borderLeft: profile.academicStatus === 'flagged' ? '4px solid #ef4444' : profile.academicStatus === 'warning' ? '4px solid #f59e0b' : undefined }}>
         <div className="prof-avatar-wrap">
-          <div className="prof-avatar">{profile.avatar}</div>
+          <div
+            className="prof-avatar"
+            style={{
+              border: profile.academicStatus === 'flagged' ? '3px solid #ef4444' : profile.academicStatus === 'warning' ? '3px solid #f59e0b' : undefined,
+              boxShadow: profile.academicStatus === 'flagged' ? '0 0 16px rgba(239, 68, 68, 0.4)' : profile.academicStatus === 'warning' ? '0 0 12px rgba(245, 158, 11, 0.3)' : undefined
+            }}
+          >
+            {profile.avatar}
+          </div>
           {isMe && <div className="prof-online"/>}
         </div>
         <div className="prof-info">
-          <div className="prof-name">{profile.name} {isMe && <span className="badge badge-gray">You</span>}</div>
-          <div className="prof-handle">hackwithbug.parul.ac.in/u/{profile.enrollment} · CE Sem {profile.semester}</div>
+          <div className="prof-name" style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+            <span>{profile.name}</span>
+            {isMe && <span className="badge badge-gray">You</span>}
+            {profile.academicStatus === 'flagged' && (
+              <span className="badge" style={{ background: 'rgba(239, 68, 68, 0.15)', color: '#ef4444', border: '1px solid #ef4444', fontWeight: 800 }}>
+                🚩 Account Flagged (Red)
+              </span>
+            )}
+            {profile.academicStatus === 'warning' && (
+              <span className="badge" style={{ background: 'rgba(245, 158, 11, 0.15)', color: '#f59e0b', border: '1px solid #f59e0b', fontWeight: 800 }}>
+                ⚠️ Academic Warning Active
+              </span>
+            )}
+          </div>
+          <div className="prof-handle">hackwithbug.parul.ac.in/u/{profile.enrollment} · CE Sem {profile.semester || 5}</div>
+
+          {/* Academic Integrity Alert Banner */}
+          {profile.academicStatus === 'flagged' && (
+            <div style={{ background: 'rgba(239, 68, 68, 0.1)', border: '1px solid rgba(239, 68, 68, 0.4)', borderRadius: '8px', padding: '10px 14px', margin: '8px 0', display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+              <span style={{ fontSize: '20px', lineHeight: 1 }}>🚩</span>
+              <div>
+                <div style={{ color: '#ef4444', fontWeight: 800, fontSize: '13px' }}>
+                  ACCOUNT FLAGGED FOR ACADEMIC DISHONESTY / PLAGIARISM
+                </div>
+                <div style={{ color: 'var(--text)', fontSize: '12px', marginTop: '2px' }}>
+                  {profile.flaggedReason || 'This account has been flagged by university faculty for code copying/plagiarism during exams.'}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {profile.academicStatus === 'warning' && (
+            <div style={{ background: 'rgba(245, 158, 11, 0.1)', border: '1px solid rgba(245, 158, 11, 0.4)', borderRadius: '8px', padding: '10px 14px', margin: '8px 0', display: 'flex', alignItems: 'flex-start', gap: '10px' }}>
+              <span style={{ fontSize: '20px', lineHeight: 1 }}>⚠️</span>
+              <div>
+                <div style={{ color: '#f59e0b', fontWeight: 800, fontSize: '13px' }}>
+                  ACADEMIC WARNING ACTIVE ({profile.academicWarningCount || 1} Violation Warning{profile.academicWarningCount > 1 ? 's' : ''})
+                </div>
+                <div style={{ color: 'var(--text)', fontSize: '12px', marginTop: '2px' }}>
+                  {profile.flaggedReason || 'Formal academic warning issued regarding code similarity. Future infractions may result in account suspension.'}
+                </div>
+              </div>
+            </div>
+          )}
+
           <div className="prof-badges-row">
             <span className="badge badge-purple">⭐ Expert</span>
             <span className="badge badge-teal">🏆 Top {profile.rank || '—'}</span>

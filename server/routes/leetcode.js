@@ -234,8 +234,24 @@ router.get('/check', auth, async (req, res) => {
   }
 });
 
+// Helper: strip HTML tags and decode basic entities
+function stripHtml(html) {
+  if (!html) return '';
+  return html
+    .replace(/<pre>[\s\S]*?<\/pre>/gi, (match) => match.replace(/<[^>]+>/g, ''))
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 // ─── POST /fetch-problem ───────────────────────────────────────────────────
-// Faculty: fetch problem metadata from LeetCode by slug (for problem import)
+// Faculty: fetch problem metadata and exact test cases from LeetCode by slug (with AI extraction)
 router.post('/fetch-problem', auth, facultyOnly, async (req, res) => {
   try {
     const { slug } = req.body;
@@ -257,6 +273,8 @@ router.post('/fetch-problem', auth, facultyOnly, async (req, res) => {
           }
           stats
           content
+          exampleTestcaseList
+          sampleTestCase
         }
       }
     `;
@@ -265,7 +283,7 @@ router.post('/fetch-problem', auth, facultyOnly, async (req, res) => {
     try {
       lcData = await lcQuery(query, { titleSlug: cleanSlug });
     } catch (err) {
-      return res.status(502).json({ error: 'Could not reach LeetCode API' });
+      return res.status(502).json({ error: 'Could not reach LeetCode API: ' + err.message });
     }
 
     const question = lcData.data?.question;
@@ -279,20 +297,126 @@ router.post('/fetch-problem', auth, facultyOnly, async (req, res) => {
       statsObj = JSON.parse(question.stats || '{}');
     } catch {}
 
-    res.json({
+    const tags = (question.topicTags || []).map(t => t.name);
+    const difficulty = (question.difficulty || 'medium').toLowerCase();
+    const rawContent = question.content || '';
+    const cleanText = stripHtml(rawContent);
+
+    let parsedResult = {
       questionId: question.questionId,
       title: question.title,
       slug: question.titleSlug,
-      difficulty: question.difficulty?.toLowerCase() || 'medium',
-      tags: (question.topicTags || []).map(t => t.name),
-      acceptance: statsObj.acRate ? parseFloat(statsObj.acRate) : 0,
-      url: `https://leetcode.com/problems/${question.titleSlug}/`
-    });
+      difficulty,
+      tags,
+      acceptance: statsObj.acRate ? parseFloat(statsObj.acRate) : 60,
+      url: `https://leetcode.com/problems/${question.titleSlug}/`,
+      statement: cleanText,
+      inputFormat: 'Read from standard input.',
+      outputFormat: 'Print result to standard output.',
+      constraints: 'See problem statement.',
+      sampleInput: question.sampleTestCase || '',
+      sampleOutput: '',
+      editorial: '',
+      testCases: []
+    };
+
+    // AI-Powered Extraction with Groq
+    if (process.env.GROQ_API_KEY) {
+      try {
+        const { Groq } = require('groq-sdk');
+        const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+
+        const system = `You are an expert competitive programming problem setter and test case extractor.
+Analyze the LeetCode problem description and extract the exact problem statement, mathematical constraints, input/output formats, and exact test cases.
+Always respond in strictly valid JSON format only without markdown fences.`;
+
+        const userPrompt = `Convert this LeetCode problem into a complete competitive programming problem with exact test cases:
+Title: ${question.title}
+Difficulty: ${difficulty}
+Tags: ${tags.join(', ')}
+
+Problem Content / HTML:
+${rawContent.slice(0, 3500)}
+
+Sample Testcase Hint:
+${question.sampleTestCase || ''}
+
+Respond with this exact JSON format:
+{
+  "statement": "Clear markdown problem description (without Examples or Constraints headers)",
+  "inputFormat": "Exact description of standard input structure",
+  "outputFormat": "Exact description of expected standard output",
+  "constraints": "Exact formatted constraints (e.g. 1 <= nums.length <= 10^5)",
+  "sampleInput": "Raw exact sample input 1",
+  "sampleOutput": "Raw exact sample output 1",
+  "editorial": "Short approach hint / algorithmic explanation",
+  "optimalAlgorithm": "Time & space complexity (e.g. O(N) time, O(1) space)",
+  "testCases": [
+    { "type": "sample", "input": "sample input 1", "output": "sample output 1" },
+    { "type": "sample", "input": "sample input 2", "output": "sample output 2" },
+    { "type": "hidden", "input": "hidden input 1", "output": "hidden output 1" },
+    { "type": "hidden", "input": "hidden input 2", "output": "hidden output 2" }
+  ],
+  "cppSolution": "C++ solution code",
+  "pythonSolution": "Python solution code",
+  "javaSolution": "Java solution code"
+}`;
+
+        const candidateModels = ['openai/gpt-oss-120b', 'openai/gpt-oss-20b', 'qwen/qwen3.8-27b', 'groq/compound'];
+        let completion = null;
+        for (const m of candidateModels) {
+          try {
+            completion = await groq.chat.completions.create({
+              messages: [
+                { role: 'system', content: system },
+                { role: 'user', content: userPrompt }
+              ],
+              model: m,
+              max_tokens: 2500,
+              temperature: 0.2
+            });
+            if (completion?.choices[0]?.message?.content) break;
+          } catch (mErr) {
+            console.warn(`Leetcode import model ${m} failed, trying next...`);
+          }
+        }
+
+
+        const rawJson = completion.choices[0]?.message?.content || '';
+        const cleanedJson = rawJson.replace(/```json|```/g, '').trim();
+        const aiParsed = JSON.parse(cleanedJson);
+
+        parsedResult = {
+          ...parsedResult,
+          ...aiParsed,
+          // Preserve core LeetCode metadata
+          questionId: question.questionId,
+          title: question.title,
+          slug: question.titleSlug,
+          difficulty,
+          tags: aiParsed.tags?.length ? aiParsed.tags : tags,
+          url: `https://leetcode.com/problems/${question.titleSlug}/`
+        };
+      } catch (aiErr) {
+        console.warn('Groq AI parsing error in fetch-problem, using fallback:', aiErr.message);
+      }
+    }
+
+    // Fallback testcase creation if none were generated
+    if (!parsedResult.testCases || parsedResult.testCases.length === 0) {
+      parsedResult.testCases = [
+        { type: 'sample', input: parsedResult.sampleInput || '1 2 3', output: parsedResult.sampleOutput || '3 2 1' },
+        { type: 'hidden', input: '4 5 6', output: '6 5 4' }
+      ];
+    }
+
+    res.json(parsedResult);
   } catch (e) {
     console.error('LeetCode fetch-problem error:', e);
     res.status(500).json({ error: e.message });
   }
 });
+
 
 // ─── POST /sync-all ────────────────────────────────────────────────────────
 // Faculty: bulk sync all students who have LC connected

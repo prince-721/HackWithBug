@@ -1,4 +1,16 @@
+const path = require('path');
+require('dotenv').config({ path: path.join(__dirname, '.env') });
+require('dotenv').config({ path: path.join(__dirname, '..', '.env') });
 require('dotenv').config();
+
+// Suppress harmless DEP0060 deprecation warnings from internal packages
+process.on('warning', (warning) => {
+  if (warning.name === 'DeprecationWarning' && (warning.code === 'DEP0060' || warning.message?.includes('util._extend'))) {
+    return;
+  }
+});
+
+
 const db = require('./db');
 db.initializeDatabase();
 const express = require('express');
@@ -6,7 +18,6 @@ const cors = require('cors');
 const helmet = require('helmet');
 const morgan = require('morgan');
 const rateLimit = require('express-rate-limit');
-const path = require('path');
 
 const allowedOrigins = ['http://localhost:3000', 'http://localhost:3001'];
 if (process.env.CLIENT_URL) {

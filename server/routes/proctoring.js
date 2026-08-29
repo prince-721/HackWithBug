@@ -29,11 +29,41 @@ router.post('/log', auth, async (req, res) => {
       { upsert: true, new: true }
     );
 
-    res.json({ success: true, totalAlerts: log.totalAlerts });
+    res.json({ success: true, totalAlerts: log.totalAlerts, disqualified: log.disqualified });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
+
+// POST /api/proctoring/disqualify — auto-disqualify student after 3 strikes
+router.post('/disqualify', auth, async (req, res) => {
+  try {
+    const { contestId, reason } = req.body;
+    if (!contestId) return res.status(400).json({ error: 'contestId required' });
+
+    const log = await ProctoringLog.findOneAndUpdate(
+      { userId: req.user.id, contestId },
+      {
+        disqualified: true,
+        disqualifiedReason: reason || 'Exceeded maximum permitted proctoring violations (3 strikes)',
+        disqualifiedAt: new Date(),
+        $push: {
+          events: {
+            type: 'disqualified',
+            detail: reason || 'Exceeded 3 violation limit: auto-terminated contest',
+            timestamp: new Date()
+          }
+        }
+      },
+      { upsert: true, new: true }
+    );
+
+    res.json({ success: true, disqualified: true, log });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 
 // GET /api/proctoring/:contestId/me — student's own log
 router.get('/:contestId/me', auth, async (req, res) => {

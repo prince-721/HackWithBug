@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import Logo from '../components/Logo';
 import './Landing.css';
 
 const FEATURES = {
@@ -35,13 +36,16 @@ export default function Landing() {
     <div className="landing">
       {/* NAV */}
       <nav className="l-nav">
-        <div className="l-logo"><div className="l-logo-icon">⌨</div><span>hack<b>with</b>bug</span></div>
+        <div className="l-logo">
+          <Logo size={32} withText={true} />
+        </div>
         <div className="l-nav-links"><a href="#features">Features</a><a href="#login">Sign in</a></div>
         <div className="l-nav-right">
           <Link to="/login"><button className="btn btn-ghost btn-sm">Log in</button></Link>
           <Link to="/login"><button className="btn btn-primary btn-sm">Get started</button></Link>
         </div>
       </nav>
+
 
       {/* HERO */}
       <section className="l-hero">

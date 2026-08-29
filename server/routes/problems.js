@@ -32,8 +32,16 @@ router.get('/:id', async (req, res) => {
 
 router.post('/', auth, facultyOnly, async (req, res) => {
   try {
+    const data = { ...req.body };
+    if (data.testCases && Array.isArray(data.testCases)) {
+      const samples = data.testCases.filter(t => t.type === 'sample');
+      const hidden = data.testCases.filter(t => t.type === 'hidden');
+      data.sampleInput = samples.length > 0 ? samples[0].input : (data.sampleInput || '');
+      data.sampleOutput = samples.length > 0 ? samples[0].output : (data.sampleOutput || '');
+      data.hiddenTestCases = hidden.map(h => ({ input: h.input || '', output: h.output || '' }));
+    }
     const prob = await Problem.create({
-      ...req.body,
+      ...data,
       submissions: 0,
       acceptance: 0
     });
@@ -45,7 +53,15 @@ router.post('/', auth, facultyOnly, async (req, res) => {
 
 router.put('/:id', auth, facultyOnly, async (req, res) => {
   try {
-    const prob = await Problem.findByIdAndUpdate(req.params.id, req.body, { new: true });
+    const data = { ...req.body };
+    if (data.testCases && Array.isArray(data.testCases)) {
+      const samples = data.testCases.filter(t => t.type === 'sample');
+      const hidden = data.testCases.filter(t => t.type === 'hidden');
+      data.sampleInput = samples.length > 0 ? samples[0].input : '';
+      data.sampleOutput = samples.length > 0 ? samples[0].output : '';
+      data.hiddenTestCases = hidden.map(h => ({ input: h.input || '', output: h.output || '' }));
+    }
+    const prob = await Problem.findByIdAndUpdate(req.params.id, data, { new: true });
     if (!prob) return res.status(404).json({ error: 'Not found' });
     res.json(prob);
   } catch (e) {

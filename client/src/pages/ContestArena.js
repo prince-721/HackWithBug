@@ -7,6 +7,8 @@ import toast from 'react-hot-toast';
 import Editor from '@monaco-editor/react';
 import { io } from 'socket.io-client';
 import useLeetCodeSync from '../hooks/useLeetCodeSync';
+import { saveCodeDraft, loadCodeDraft, formatTimeAgo } from '../utils/codeStorage';
+
 import {
   Menu,
   ChevronLeft,
@@ -33,103 +35,53 @@ import {
   ChevronDown,
   Video,
   RefreshCw,
-  ExternalLink
+  ExternalLink,
+  Camera,
+  Mic,
+  AlertTriangle,
+  CheckCircle2,
+  ShieldAlert,
+  Shield,
+  Maximize,
+  Check,
+  LogOut,
+  Clock,
+  ArrowLeft,
+  BookOpen
 } from 'lucide-react';
+import './Practice.css';
 import './ContestArena.css';
 
 // Language Mappers
 const LANG_LABELS = {
-  'java17': 'Java',
-  'cpp17': 'C++',
-  'python3': 'Python3',
-  'c': 'C'
+  'cpp17': 'C++17',
+  'java17': 'Java 17',
+  'python3': 'Python 3',
+  'c': 'C',
+  'javascript': 'JavaScript'
 };
-
-
 
 const MONACO_LANGS = {
-  'java17': 'java',
   'cpp17': 'cpp',
+  'java17': 'java',
   'python3': 'python',
-  'c': 'c'
+  'c': 'c',
+  'javascript': 'javascript'
 };
 
-// Hardcoded starter code template generator
+const STARTER_CODES = {
+  'cpp17': `#include <iostream>\n#include <vector>\n#include <string>\n#include <algorithm>\nusing namespace std;\n\nint main() {\n    ios_base::sync_with_stdio(false);\n    cin.tie(NULL);\n    \n    // Write your contest solution here\n    \n    return 0;\n}`,
+  'java17': `import java.util.*;\nimport java.io.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        // Write your contest solution here\n        \n    }\n}`,
+  'python3': `import sys\n\ndef solve():\n    input = sys.stdin.read\n    # Write your contest solution here\n    pass\n\nif __name__ == '__main__':\n    solve()`,
+  'c': `#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\nint main() {\n    // Write your contest solution here\n    \n    return 0;\n}`,
+  'javascript': `const fs = require('fs');\n\nfunction solve() {\n    const input = fs.readFileSync(0, 'utf-8');\n    // Write your contest solution here\n}\n\nsolve();`
+};
+
 const getStarterCode = (problem, language) => {
-  if (!problem) return '';
-  const title = problem.title || '';
-  
-  const templates = {
-    'Reverse the Array': {
-      'java17': `class Solution {\n    public void reverseArray(int[] arr) {\n        \n    }\n}`,
-      'cpp17': `class Solution {\npublic:\n    void reverseArray(vector<int>& arr) {\n        \n    }\n};`,
-      'python3': `class Solution:\n    def reverseArray(self, arr: List[int]) -> None:\n        pass`,
-      'c': `void reverseArray(int* arr, int arrSize) {\n\n}`
-    },
-    'Climb the Leaderboard': {
-      'java17': `class Solution {\n    public int[] climbingLeaderboard(int[] ranked, int[] player) {\n        \n    }\n}`,
-      'cpp17': `class Solution {\npublic:\n    vector<int> climbingLeaderboard(vector<int>& ranked, vector<int>& player) {\n        \n    }\n};`,
-      'python3': `class Solution:\n    def climbingLeaderboard(self, ranked: List[int], player: List[int]) -> List[int]:\n        pass`,
-      'c': `int* climbingLeaderboard(int* ranked, int rankedSize, int* player, int playerSize, int* resultCount) {\n\n}`
-    },
-    'Graph Coloring': {
-      'java17': `class Solution {\n    public boolean isBipartite(int[][] graph) {\n        \n    }\n}`,
-      'cpp17': `class Solution {\npublic:\n    bool isBipartite(vector<vector<int>>& graph) {\n        \n    }\n};`,
-      'python3': `class Solution:\n    def isBipartite(self, graph: List[List[int]]) -> bool:\n        pass`,
-      'c': `bool isBipartite(int** graph, int graphSize, int* graphColSize) {\n\n}`
-    },
-    'Segment Tree XOR': {
-      'java17': `class Solution {\n    public int[] xorQueries(int[] arr, int[][] queries) {\n        \n    }\n}`,
-      'cpp17': `class Solution {\npublic:\n    vector<int> xorQueries(vector<int>& arr, vector<vector<int>>& queries) {\n        \n    }\n};`,
-      'python3': `class Solution:\n    def xorQueries(self, arr: List[int], queries: List[List[int]]) -> List[int]:\n        pass`,
-      'c': `int* xorQueries(int* arr, int arrSize, int** queries, int queriesSize, int* queriesColSize, int* resultCount) {\n\n}`
-    },
-    'Network Flow': {
-      'java17': `class Solution {\n    public int maxFlow(int n, int[][] edges, int source, int sink) {\n        \n    }\n}`,
-      'cpp17': `class Solution {\npublic:\n    int maxFlow(int n, vector<vector<int>>& edges, int source, int sink) {\n        \n    }\n};`,
-      'python3': `class Solution:\n    def maxFlow(self, n: int, edges: List[List[int]], source: int, sink: int) -> int:\n        pass`,
-      'c': `int maxFlow(int n, int** edges, int edgesSize, int* edgesColSize, int source, int sink) {\n\n}`
-    },
-    'DP on Trees': {
-      'java17': `class Solution {\n    public int maxIndependentSet(int n, int[][] edges, int[] weights) {\n        \n    }\n}`,
-      'cpp17': `class Solution {\npublic:\n    int maxIndependentSet(int n, vector<vector<int>>& edges, vector<int>& weights) {\n        \n    }\n};`,
-      'python3': `class Solution:\n    def maxIndependentSet(self, n: int, edges: List[List[int]], weights: List[int]) -> int:\n        pass`,
-      'c': `int maxIndependentSet(int n, int** edges, int edgesSize, int* edgesColSize, int* weights, int weightsSize) {\n\n}`
-    },
-    'Two Sum': {
-      'java17': `class Solution {\n    public int[] twoSum(int[] nums, int target) {\n        \n    }\n}`,
-      'cpp17': `class Solution {\npublic:\n    vector<int> twoSum(vector<int>& nums, int target) {\n        \n    }\n};`,
-      'python3': `class Solution:\n    def twoSum(self, nums: List[int], target: int) -> List[int]:\n        pass`,
-      'c': `int* twoSum(int* nums, int numsSize, int target, int* returnSize) {\n\n}`
-    },
-    'Longest Common Subsequence': {
-      'java17': `class Solution {\n    public int longestCommonSubsequence(String text1, String text2) {\n        \n    }\n}`,
-      'cpp17': `class Solution {\npublic:\n    int longestCommonSubsequence(string text1, string text2) {\n        \n    }\n};`,
-      'python3': `class Solution:\n    def longestCommonSubsequence(self, text1: str, text2: str) -> int:\n        pass`,
-      'c': `int longestCommonSubsequence(char* text1, char* text2) {\n\n}`
-    }
-  };
-
-  const key = Object.keys(templates).find(k => title.toLowerCase().includes(k.toLowerCase()));
-  if (key && templates[key][language]) {
-    return templates[key][language];
+  if (problem?.starterCode && problem.starterCode[language]) {
+    return problem.starterCode[language];
   }
-
-  const funcName = title.split(' ').map((word, idx) => {
-    const clean = word.replace(/[^a-zA-Z0-9]/g, '');
-    if (idx === 0) return clean.toLowerCase();
-    return clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase();
-  }).join('');
-
-  if (language === 'java17') {
-    return `class Solution {\n    public void ${funcName || 'solve'}() {\n        \n    }\n}`;
-  } else if (language === 'cpp17') {
-    return `class Solution {\npublic:\n    void ${funcName || 'solve'}() {\n        \n    }\n};`;
-  } else if (language === 'python3') {
-    return `class Solution:\n    def ${funcName || 'solve'}(self) -> None:\n        pass`;
-  } else {
-    return `void ${funcName || 'solve'}() {\n\n}`;
-  }
+  return STARTER_CODES[language] || STARTER_CODES['cpp17'];
 };
 
 export default function ContestArena() {
@@ -190,7 +142,21 @@ export default function ContestArena() {
   ]);
   const [aiInput, setAiInput] = useState('');
 
-  // Proctoring states
+  // Proctoring & System Check states
+  const [inArena, setInArena] = useState(user?.role === 'faculty');
+  const [camVerified, setCamVerified] = useState(false);
+  const [micVerified, setMicVerified] = useState(false);
+  const [mediaStream, setMediaStream] = useState(null);
+  const [micVolume, setMicVolume] = useState(0);
+  const [testingMedia, setTestingMedia] = useState(false);
+  const checkVideoRef = useRef(null);
+
+  // 3-Strike Violation states
+  const [violationsCount, setViolationsCount] = useState(0);
+  const [showViolationModal, setShowViolationModal] = useState(false);
+  const [violationReason, setViolationReason] = useState('');
+  const [isDisqualified, setIsDisqualified] = useState(false);
+
   const [camOn, setCamOn] = useState(false);
   const [micOn, setMicOn] = useState(false);
   const [tabAlerts, setTabAlerts] = useState(0);
@@ -198,6 +164,29 @@ export default function ContestArena() {
   const [fullscreenExits, setFullscreenExits] = useState(0);
   const [pasteEvents, setPasteEvents] = useState(0);
   const videoRef = useRef(null);
+
+  // End Contest Modal state
+  const [showEndModal, setShowEndModal] = useState(false);
+  const [endingContest, setEndingContest] = useState(false);
+
+  const handleEndContest = async () => {
+    setEndingContest(true);
+    try {
+      if (mediaStream) {
+        mediaStream.getTracks().forEach(t => t.stop());
+      }
+      if (document.fullscreenElement) {
+        document.exitFullscreen().catch(() => {});
+      }
+      toast.success('Contest examination concluded. Your results have been saved.');
+      navigate('/dashboard');
+    } catch (e) {
+      navigate('/dashboard');
+    } finally {
+      setEndingContest(false);
+      setShowEndModal(false);
+    }
+  };
 
   // Typing analytics refs
   const startTimeRef = useRef(Date.now());
@@ -215,17 +204,45 @@ export default function ContestArena() {
   // Socket
   const socketRef = useRef(null);
 
-  // Proctoring Log Helper with local throttling to prevent rate limits (max once per 5 seconds per violation type)
+  // Proctoring Log Helper with local throttling to prevent rate limits
   const lastViolationSentRef = useRef({});
   const logViolation = useCallback(async (type, detail = '') => {
     const now = Date.now();
     const lastSent = lastViolationSentRef.current[type] || 0;
-    if (now - lastSent < 5000) return; // limit local rate to once every 5 seconds
+    if (now - lastSent < 3000) return;
     lastViolationSentRef.current[type] = now;
     try {
       await api.post('/proctoring/log', { contestId: id, type, detail });
     } catch (e) {}
   }, [id]);
+
+  // Violation Action Handler (Strict 3-Strike Limit)
+  const handleViolation = useCallback(async (type, reason) => {
+    if (!inArena || user.role !== 'student' || isDisqualified) return;
+
+    setViolationsCount(prev => {
+      const next = prev + 1;
+      setViolationReason(reason);
+      logViolation(type, `Strike #${next}: ${reason}`);
+
+      if (next >= 3) {
+        setIsDisqualified(true);
+        api.post('/proctoring/disqualify', {
+          contestId: id,
+          reason: `Exceeded maximum 3-strike limit: ${reason}`
+        }).catch(() => {});
+        toast.error('❌ DISQUALIFIED: You have exceeded the 3 violation limit.');
+        if (document.fullscreenElement) {
+          document.exitFullscreen().catch(() => {});
+        }
+      } else {
+        setShowViolationModal(true);
+        toast.error(`⚠️ Proctoring Strike (${next}/3): ${reason}`, { duration: 5000 });
+      }
+      return next;
+    });
+  }, [inArena, user.role, isDisqualified, logViolation, id]);
+
 
   // 1. Draggable divider
   const handleMouseDown = useCallback((e) => {
@@ -256,41 +273,27 @@ export default function ContestArena() {
     };
   }, [isDragging]);
 
-  // 2. Visibility / Copy / Keyboard Proctoring Event Listeners
+  // 2. Fullscreen & Visibility & Security Event Listeners (Active only inside arena)
   useEffect(() => {
-    if (!contest || (user.role === 'student' && !contest.isRegistered)) return;
+    if (!inArena || !contest || user.role !== 'student' || isDisqualified) return;
 
     const handleVisibility = () => {
       if (document.hidden) {
         setTabAlerts(a => a + 1);
-        toast.error('⚠ Tab switch detected!', { duration: 3000 });
-        logViolation('tabSwitch', 'Student left the contest viewport');
+        handleViolation('tabSwitch', 'Switched browser tab or minimized window');
       }
+    };
+
+    const handleWindowBlur = () => {
+      handleViolation('windowBlur', 'Clicked outside the contest application window');
     };
 
     const handleFullscreen = () => {
-      if (!document.fullscreenElement && isLeftFullscreen) {
+      if (!document.fullscreenElement) {
         setFullscreenExits(n => n + 1);
-        toast.error('⚠ Fullscreen mode exited!', { duration: 3000 });
-        logViolation('fullscreenExit', 'Student left the editor fullscreen view');
-        setIsLeftFullscreen(false);
+        handleViolation('fullscreenExit', 'Exited fullscreen examination mode');
       }
     };
-
-    // DevTools detection with visibility guard to prevent false alerts when page is hidden
-    let last = Date.now();
-    const devToolsTimer = setInterval(() => {
-      const now = Date.now();
-      if (document.hidden) {
-        last = now; // Reset timer when tab is hidden
-        return;
-      }
-      if (now - last > 500) { // Thicker margin to prevent false flags on lag
-        logViolation('devtools', 'DevTools panel opened');
-        toast.error('🚨 DevTools interface query logged!', { duration: 4000 });
-      }
-      last = Date.now();
-    }, 200);
 
     // Copy event
     const handleCopy = () => {
@@ -299,17 +302,62 @@ export default function ContestArena() {
       toast.error('⚠ Copy event logged!', { duration: 2000 });
     };
 
+    // Right-Click Context Menu Prevention
+    const handleContextMenu = (e) => {
+      e.preventDefault();
+      logViolation('rightClick', 'Attempted to open context menu (Right-Click)');
+      toast.error('🛡️ Right-click is strictly prohibited during the contest.', { duration: 2500 });
+    };
+
+    // DevTools & Inspect Element Keybinding Prevention
+    const handleSecurityKeyDown = (e) => {
+      if (
+        e.key === 'F12' ||
+        (e.ctrlKey && e.shiftKey && ['I', 'i', 'J', 'j', 'C', 'c'].includes(e.key)) ||
+        (e.ctrlKey && ['U', 'u', 'S', 's'].includes(e.key))
+      ) {
+        e.preventDefault();
+        e.stopPropagation();
+        handleViolation('devtools', `Prohibited key combination pressed (${e.key})`);
+        toast.error('🛡️ Inspect element & DevTools shortcuts are disabled during examination.', { duration: 3000 });
+      }
+    };
+
+    // Camera track monitoring
+    if (mediaStream) {
+      const videoTrack = mediaStream.getVideoTracks()[0];
+      if (videoTrack) {
+        videoTrack.onended = () => {
+          setCamOn(false);
+          handleViolation('cameraOff', 'Webcam was disconnected or turned off');
+        };
+        videoTrack.onmute = () => {
+          setCamOn(false);
+          handleViolation('cameraMuted', 'Webcam video stream was muted');
+        };
+        videoTrack.onunmute = () => {
+          setCamOn(true);
+        };
+      }
+    }
+
     document.addEventListener('visibilitychange', handleVisibility);
     document.addEventListener('fullscreenchange', handleFullscreen);
+    window.addEventListener('blur', handleWindowBlur);
     document.addEventListener('copy', handleCopy);
+    document.addEventListener('contextmenu', handleContextMenu);
+    window.addEventListener('keydown', handleSecurityKeyDown, true);
 
     return () => {
       document.removeEventListener('visibilitychange', handleVisibility);
       document.removeEventListener('fullscreenchange', handleFullscreen);
+      window.removeEventListener('blur', handleWindowBlur);
       document.removeEventListener('copy', handleCopy);
-      clearInterval(devToolsTimer);
+      document.removeEventListener('contextmenu', handleContextMenu);
+      window.removeEventListener('keydown', handleSecurityKeyDown, true);
     };
-  }, [contest, isLeftFullscreen, logViolation, user.role]);
+  }, [inArena, contest, user.role, isDisqualified, handleViolation, logViolation, mediaStream]);
+
 
   // 3. Typing speed analytics tracker
   useEffect(() => {
@@ -362,11 +410,18 @@ export default function ContestArena() {
     toast.error('⚠ Paste event intercepted and logged!', { duration: 2500 });
   };
 
-  // Editor changes
+  // Editor changes (auto-saved for 7 days)
   const handleEditorChange = (val) => {
-    setCode(val || '');
+    const newCode = val || '';
+    setCode(newCode);
     setSaveStatus('Saving...');
+    if (selectedProb) {
+      const probId = selectedProb.id || selectedProb._id;
+      saveCodeDraft(user?.id, probId, selectedLang, newCode, id);
+      setTimeout(() => setSaveStatus('Saved (7d Cache)'), 300);
+    }
   };
+
 
   useEffect(() => {
     if (saveStatus === 'Saving...') {
@@ -465,6 +520,13 @@ export default function ContestArena() {
     api.get(`/contests/${id}`).then(r => {
       setContest(r.data);
       
+      // Check if student is disqualified on the server
+      if (r.data.isDisqualified) {
+        setIsDisqualified(true);
+        setViolationReason(r.data.disqualifiedReason || 'Permanently disqualified from contest');
+        setInArena(false);
+      }
+
       // Auto-select first problem if none selected
       if (r.data.problemDetails && r.data.problemDetails.length > 0) {
         setSelectedProb(prev => {
@@ -479,6 +541,21 @@ export default function ContestArena() {
     }).catch(() => {
       toast.error('Error fetching contest details');
     });
+
+    // Fetch personal proctoring log to sync strikes and disqualification
+    api.get(`/proctoring/${id}/me`).then(r => {
+      if (r.data?.disqualified) {
+        setIsDisqualified(true);
+        setViolationReason(r.data.disqualifiedReason || 'Permanently disqualified from contest');
+        setInArena(false);
+      }
+      if (r.data?.totalAlerts !== undefined) {
+        setTabAlerts(r.data.tabSwitches || 0);
+        setFullscreenExits(r.data.fullscreenExits || 0);
+        setViolationsCount(Math.min(3, r.data.totalAlerts));
+      }
+    }).catch(() => {});
+
 
     api.get(`/submissions?userId=${user.id}&contestId=${id}`).then(r => {
       setSubmissions(r.data);
@@ -549,64 +626,65 @@ export default function ContestArena() {
     return () => clearInterval(interval);
   }, [id, loadData]);
 
-  // Update default code when selected problem or language changes
+  // Restore 7-day auto-saved draft or starter code when selected problem or language changes
   useEffect(() => {
     if (selectedProb) {
-      setCode(getStarterCode(selectedProb, selectedLang));
+      const probId = selectedProb.id || selectedProb._id;
+      const draft = loadCodeDraft(user?.id, probId, selectedLang, id);
+      if (draft && draft.code && draft.code.trim()) {
+        setCode(draft.code);
+        setSaveStatus(`Draft Restored (${formatTimeAgo(draft.updatedAt)})`);
+      } else {
+        setCode(getStarterCode(selectedProb, selectedLang));
+        setSaveStatus('Saved');
+      }
     }
-  }, [selectedProb, selectedLang]);
+  }, [selectedProb, selectedLang, id, user?.id]);
 
-  // Handle register code gate
-  const handleGateRegister = async () => {
-    setRegistering(true);
-    try {
-      const res = await api.post(`/contests/${id}/register`, { password: authPassword });
-      setContest(prev => ({ ...prev, isRegistered: true, participantCount: res.data.participantCount }));
-      toast.success('Access granted! Welcome to the Arena.');
-      loadData();
-    } catch (err) {
-      toast.error(err.response?.data?.error || 'Access password rejected');
-    } finally {
-      setRegistering(false);
-    }
-  };
 
-  // 7. Simulated/Real judge Run Execution
+
+
+  // 7. Deterministic judge Run Execution (tests sample / custom cases without creating database submission)
   const handleRunCode = async () => {
-    if (!selectedProb) return;
+    if (!selectedProb || !code.trim()) {
+      return toast.error('Source code is empty');
+    }
+    // Capture tab before switching to result tab
+    const wasCustomTab = activeConsoleTab === 'custom';
     setConsoleHeight(280);
     setActiveConsoleTab('result');
     setRunResult('running');
 
     try {
-      const res = await api.post('/submissions', {
+      const res = await api.post('/submissions/run', {
         code,
         language: selectedLang,
         problemId: selectedProb.id || selectedProb._id,
-        contestId: id
+        customInput: wasCustomTab && customInput ? customInput : undefined
       });
 
-      const sub = res.data;
+      const data = res.data;
       setRunResult({
-        status: sub.verdict,
-        outputs: [
-          {
-            input: customInput || selectedProb.sampleInput || '',
-            output: sub.verdict === 'AC' ? (selectedProb.sampleOutput || '') : (sub.aiFeedback || 'Output error'),
-            expected: selectedProb.sampleOutput || '',
-            passed: sub.verdict === 'AC'
-          }
-        ]
+        status: data.verdict,
+        testsPassed: data.testsPassed || (data.passed ? 1 : 0),
+        totalTests: data.totalTests || 1,
+        timeMs: data.timeMs || 0,
+        memoryKb: data.memoryKb || 0,
+        stderr: data.stderr || '',
+        testResults: data.testResults || [],
+        stdout: data.stdout || ''
       });
 
-      if (sub.verdict === 'AC') {
-        toast.success('Local run execution passed sample test!');
+      if (data.verdict === 'AC') {
+        toast.success('Sample testcase passed! ✓');
+      } else if (data.verdict === 'CE') {
+        toast.error('Compilation Error. Check stderr log.');
       } else {
-        toast.error(`Local run compiled as ${sub.verdict}`);
+        toast.error(`Test run returned ${data.verdict}`);
       }
     } catch (e) {
-      toast.error('Code execution failed. Please verify syntax structure.');
-      setRunResult(null);
+      toast.error(e.response?.data?.error || 'Code execution failed. Please verify syntax structure.');
+      setRunResult({ status: 'CE', stderr: 'Execution server connection failed' });
     }
   };
 
@@ -662,6 +740,16 @@ export default function ContestArena() {
 
       toast.dismiss('submit-toast');
       const sub = res.data;
+
+      setRunResult({
+        status: sub.verdict,
+        testsPassed: sub.testsPassed,
+        totalTests: sub.totalTests,
+        timeMs: sub.time,
+        memoryKb: (sub.memory || 0) * 1024,
+        stderr: sub.aiFeedback,
+        testResults: sub.testResults || []
+      });
 
       // Append to submissions
       setSubmissions(prev => [sub, ...prev]);
@@ -800,55 +888,312 @@ export default function ContestArena() {
     );
   }
 
-  // Registration gate block screen
-  if (user.role === 'student' && !contest.isRegistered) {
-    return (
-      <div className="lc-arena-container flex items-center justify-center bg-[#1a1b26] p-6">
-        <div className="max-w-[460px] w-full p-8 rounded-xl bg-[#1e1e2e] border border-white/10 text-center shadow-2xl">
-          <Lock size={40} className="mx-auto text-indigo-400 mb-4 animate-bounce" />
-          <h2 className="text-xl font-bold text-white mb-2">🔒 Registration Required</h2>
-          <h3 className="text-sm font-semibold text-indigo-400 mb-4">{contest.title}</h3>
-          <p className="text-xs text-gray-400 mb-6 leading-relaxed">
-            {contest.description || 'You must register for this contest to view problem statements and submit solutions.'}
-          </p>
+  // Test Camera & Microphone Permissions & Stream
+  const handleTestMedia = async () => {
+    setTestingMedia(true);
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      setMediaStream(stream);
+      setCamVerified(true);
+      setMicVerified(true);
+      if (checkVideoRef.current) {
+        checkVideoRef.current.srcObject = stream;
+      }
 
-          {contest.contestType === 'private' ? (
-            <div className="flex flex-col gap-3 w-full mb-6">
-              <label className="text-xs font-bold text-gray-300 text-left">Access Passcode</label>
-              <input
-                className="bg-white/5 border border-white/10 rounded-md px-3 py-2 text-sm text-center text-white outline-none focus:border-indigo-500 transition-colors"
-                type="password"
-                placeholder="Access Code"
-                value={authPassword}
-                onChange={e => setAuthPassword(e.target.value)}
-              />
-              <button
-                className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 rounded-md text-sm transition-colors"
-                onClick={handleGateRegister}
-                disabled={registering || !authPassword}
-              >
-                {registering ? 'Validating Password…' : 'Unlock & Register →'}
-              </button>
-            </div>
-          ) : (
-            <button
-              className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-6 rounded-md text-sm w-full mb-6 transition-colors"
-              onClick={handleGateRegister}
-              disabled={registering}
-            >
-              {registering ? 'Registering…' : 'Register for Contest →'}
-            </button>
-          )}
+      // Start audio frequency volume analyser
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 256;
+        const source = audioCtx.createMediaStreamSource(stream);
+        source.connect(analyser);
+        const dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+        const updateVol = () => {
+          analyser.getByteFrequencyData(dataArray);
+          let sum = 0;
+          for (let i = 0; i < dataArray.length; i++) sum += dataArray[i];
+          const avg = sum / dataArray.length;
+          setMicVolume(Math.min(100, Math.round(avg * 2.8)));
+          requestAnimationFrame(updateVol);
+        };
+        updateVol();
+      } catch (aErr) {
+        console.warn('Audio analyser error:', aErr);
+      }
+
+      toast.success('Camera & Microphone verified successfully!');
+    } catch (err) {
+      toast.error('Could not access camera/microphone. Please allow browser permissions in settings.');
+    } finally {
+      setTestingMedia(false);
+    }
+  };
+
+  // Join Contest & Enter Fullscreen Mode
+  const handleEnterArena = async () => {
+    if (!camVerified || !micVerified) {
+      return toast.error('Please verify Camera and Microphone permissions first.');
+    }
+
+    // Register if private or not yet registered
+    if (!contest.isRegistered) {
+      if (contest.contestType === 'private' && !authPassword) {
+        return toast.error('Please enter the contest passcode');
+      }
+      setRegistering(true);
+      try {
+        const res = await api.post(`/contests/${id}/register`, { password: authPassword });
+        setContest(prev => ({ ...prev, isRegistered: true, participantCount: res.data.participantCount }));
+        toast.success('Registration completed!');
+      } catch (err) {
+        setRegistering(false);
+        return toast.error(err.response?.data?.error || 'Registration failed');
+      }
+      setRegistering(false);
+    }
+
+    // Enter Fullscreen
+    try {
+      if (document.documentElement.requestFullscreen) {
+        await document.documentElement.requestFullscreen();
+      }
+    } catch (fsErr) {
+      console.warn('Fullscreen request bypassed:', fsErr);
+    }
+
+    // Attach stream to live proctoring video bubble
+    if (mediaStream && videoRef.current) {
+      videoRef.current.srcObject = mediaStream;
+    }
+    setCamOn(true);
+    setMicOn(true);
+    setInArena(true);
+    toast.success('🛡️ Proctored Exam Started. Fullscreen active.');
+  };
+
+  // Disqualification Lockout Screen
+  if (isDisqualified) {
+    return (
+      <div className="disqualified-full-overlay">
+        <div className="max-w-[500px] w-full p-8 bg-[#111827] border-2 border-red-500 rounded-2xl shadow-2xl text-center">
+          <ShieldAlert size={56} className="mx-auto text-red-500 mb-4 animate-bounce" />
+          <h2 className="text-2xl font-black text-white mb-2">❌ CONTEST TERMINATED</h2>
+          <div className="badge badge-danger text-xs px-3 py-1 mb-4 inline-block font-bold">
+            Disqualified · 3 / 3 Strike Limit Exceeded
+          </div>
+          <p className="text-sm text-gray-300 mb-6 leading-relaxed">
+            You exited fullscreen mode, switched tabs, or unfocused the contest window more than 3 times. As per examination guidelines, your session has been automatically locked and submitted.
+          </p>
+          <div className="bg-red-500/10 border border-red-500/20 rounded-xl p-4 mb-6 text-left text-xs text-red-300">
+            <div className="font-bold mb-1">Violation Log Summary:</div>
+            <div>• Tab switches / window exits: {tabAlerts + fullscreenExits || 3}</div>
+            <div>• Termination reason: {violationReason || 'Exceeded 3 permitted strikes'}</div>
+            <div>• Logged to faculty proctoring console: Yes</div>
+          </div>
           <button
-            className="text-gray-400 hover:text-white text-xs block mx-auto underline transition-colors"
+            className="btn btn-primary w-full py-3 font-bold"
             onClick={() => navigate('/dashboard')}
           >
-            ← Back to Dashboard
+            Return to Dashboard
           </button>
         </div>
       </div>
     );
   }
+
+  // Pre-Contest Lobby & Hardware System Verification Gate
+  if (!inArena) {
+    return (
+      <div className="arena-lobby-overlay">
+        <div className="arena-lobby-container">
+          {/* Left Column: Contest Overview & Rules */}
+          <div className="lobby-contest-meta-card">
+            <div>
+              <div className="lobby-badge-row">
+                <span className={`badge ${contest.status === 'live' ? 'badge-primary' : 'badge-gold'}`}>
+                  {contest.status === 'live' ? '🔴 LIVE CONTEST' : '📅 SCHEDULED'}
+                </span>
+                <span className="badge badge-teal">{contest.contestType?.toUpperCase() || 'PUBLIC'}</span>
+                <span className="badge badge-danger">🛡️ PROCTORED EXAM</span>
+              </div>
+              <h1 className="lobby-title">{contest.title}</h1>
+              <p className="lobby-desc">
+                {contest.description || 'Welcome to the HackWithBug proctored examination arena. Complete the hardware verification on the right to enter.'}
+              </p>
+
+              <div className="lobby-stats-grid">
+                <div className="lobby-stat-item">
+                  <div className="lobby-stat-val">{contest.duration || 120} mins</div>
+                  <div className="lobby-stat-lbl">Exam Duration</div>
+                </div>
+                <div className="lobby-stat-item">
+                  <div className="lobby-stat-val">{contest.problems?.length || 4} Problems</div>
+                  <div className="lobby-stat-lbl">Problem Bank</div>
+                </div>
+                <div className="lobby-stat-item">
+                  <div className="lobby-stat-val">{contest.maxMarks || 100} Pts</div>
+                  <div className="lobby-stat-lbl">Total Marks</div>
+                </div>
+                <div className="lobby-stat-item">
+                  <div className="lobby-stat-val">3 Strikes</div>
+                  <div className="lobby-stat-lbl">Exit Limit</div>
+                </div>
+              </div>
+
+              {/* Private Contest Passcode */}
+              {contest.contestType === 'private' && !contest.isRegistered && (
+                <div className="mb-6">
+                  <label className="block text-xs font-bold text-gray-300 mb-2">Access Passcode Required</label>
+                  <input
+                    type="password"
+                    className="w-full bg-white/5 border border-white/10 rounded-lg px-3 py-2 text-sm text-white focus:border-indigo-500 outline-none"
+                    placeholder="Enter contest passcode"
+                    value={authPassword}
+                    onChange={e => setAuthPassword(e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
+
+            {/* Anti-Cheating & 3-Strike Rules Notice */}
+            <div className="lobby-rules-box">
+              <div className="lobby-rules-title">
+                <AlertTriangle size={15} />
+                <span>Strict Examination Guidelines</span>
+              </div>
+              <ul className="lobby-rules-list">
+                <li>Fullscreen is mandatory during the entire exam.</li>
+                <li><strong>3-Strike Rule:</strong> Switching tabs or exiting fullscreen 3 times will instantly terminate and disqualify your exam.</li>
+                <li>Live camera & microphone feeds are monitored for academic integrity.</li>
+              </ul>
+            </div>
+          </div>
+
+          {/* Right Column: Interactive Hardware System Check */}
+          <div className="lobby-checks-card">
+            <div className="checks-header">
+              <Shield size={18} color="#818cf8" />
+              <span>Pre-Exam System Readiness Check</span>
+            </div>
+            <div className="checks-sub">
+              Grant camera & microphone permissions to unlock the examination arena.
+            </div>
+
+            {/* Camera Check Box */}
+            <div className={`check-item-box ${camVerified ? 'verified' : ''}`}>
+              <div className="check-item-head">
+                <div className="check-item-title">
+                  <Camera size={16} color={camVerified ? '#00b8a3' : '#a5b4fc'} />
+                  <span>1. Webcam Video Check</span>
+                </div>
+                {camVerified ? (
+                  <span className="badge badge-teal flex items-center gap-1">
+                    <Check size={12} /> Verified
+                  </span>
+                ) : (
+                  <button
+                    className="btn btn-secondary btn-sm"
+                    onClick={handleTestMedia}
+                    disabled={testingMedia}
+                  >
+                    {testingMedia ? 'Checking…' : 'Enable Camera'}
+                  </button>
+                )}
+              </div>
+              {camVerified ? (
+                <div>
+                  <video ref={checkVideoRef} className="camera-preview-mirror" autoPlay muted playsInline />
+                  <div className="text-[11px] text-gray-400 mt-2 flex items-center gap-1">
+                    <CheckCircle2 size={12} color="#00b8a3" /> Face clearly visible in frame
+                  </div>
+                </div>
+              ) : (
+                <div className="text-xs text-gray-400">
+                  Click Enable Camera to grant browser webcam permissions.
+                </div>
+              )}
+            </div>
+
+            {/* Microphone Check Box */}
+            <div className={`check-item-box ${micVerified ? 'verified' : ''}`}>
+              <div className="check-item-head">
+                <div className="check-item-title">
+                  <Mic size={16} color={micVerified ? '#00b8a3' : '#a5b4fc'} />
+                  <span>2. Microphone Audio Check</span>
+                </div>
+                {micVerified ? (
+                  <span className="badge badge-teal flex items-center gap-1">
+                    <Check size={12} /> Active
+                  </span>
+                ) : (
+                  <span className="text-[11px] text-gray-500">Enabled with camera</span>
+                )}
+              </div>
+              {micVerified ? (
+                <div>
+                  <div className="text-[11px] text-gray-400 flex items-center justify-between">
+                    <span>Live Mic Input Level:</span>
+                    <span className="font-mono text-indigo-300">{micVolume}%</span>
+                  </div>
+                  <div className="audio-meter-bar-track">
+                    <div className="audio-meter-bar-fill" style={{ width: `${Math.max(8, micVolume)}%` }} />
+                  </div>
+                </div>
+              ) : (
+                <div className="text-xs text-gray-400">
+                  Microphone will be activated along with webcam verification.
+                </div>
+              )}
+            </div>
+
+            {/* Fullscreen Acknowledgment */}
+            <div className="check-item-box verified">
+              <div className="check-item-head">
+                <div className="check-item-title">
+                  <Maximize size={16} color="#00b8a3" />
+                  <span>3. Fullscreen Examination Lock</span>
+                </div>
+                <span className="badge badge-teal flex items-center gap-1">
+                  <Check size={12} /> Enforced
+                </span>
+              </div>
+              <div className="text-xs text-gray-400">
+                Entering the contest will automatically activate full viewport mode.
+              </div>
+            </div>
+
+            {/* Enter Contest CTA Button */}
+            <div className="mt-auto pt-4">
+              <button
+                className="btn btn-primary w-full py-3 text-sm font-bold flex items-center justify-center gap-2"
+                onClick={handleEnterArena}
+                disabled={!camVerified || !micVerified || registering}
+                style={{
+                  opacity: (!camVerified || !micVerified) ? 0.6 : 1,
+                  cursor: (!camVerified || !micVerified) ? 'not-allowed' : 'pointer'
+                }}
+              >
+                {registering ? 'Registering & Initializing…' : (
+                  <>
+                    <Shield size={16} />
+                    <span>Enter Exam & Enable Fullscreen →</span>
+                  </>
+                )}
+              </button>
+              <button
+                className="text-gray-400 hover:text-white text-xs block mx-auto mt-3 underline"
+                onClick={() => navigate('/dashboard')}
+              >
+                ← Back to Dashboard
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
 
   // Find index of selected problem in contest
   const selectedProbIndex = contest.problemDetails?.findIndex(p => p.id === selectedProb?.id || p._id === selectedProb?.id) ?? 0;
@@ -921,377 +1266,304 @@ export default function ContestArena() {
         </div>
       </div>
 
-      {/* TOP NAVIGATION BAR */}
-      <nav className="lc-navbar">
-        <div className="lc-nav-left">
-          <button className="lc-nav-btn" onClick={() => setIsDrawerOpen(!isDrawerOpen)}>
-            <Menu size={18} />
+      {/* TOP PRACTICE-STYLE NAVBAR */}
+      <nav className="lc-practice-navbar">
+        {/* Left: Problem navigation controls */}
+        <div className="lc-pnav-left">
+          <button
+            className="lc-pnav-btn"
+            onClick={() => setIsDrawerOpen(!isDrawerOpen)}
+            title="Browse all contest problems"
+          >
+            <Menu size={16} />
+            <span style={{ marginLeft: '4px', fontWeight: 600 }}>Problems ({contest.problemDetails?.length || 0})</span>
           </button>
-          <span className="lc-problem-list-title" onClick={() => setIsDrawerOpen(!isDrawerOpen)}>
-            Problem List
-          </span>
-          <button className="lc-nav-btn" onClick={() => {
-            if (selectedProbIndex > 0) setSelectedProb(contest.problemDetails[selectedProbIndex - 1]);
-          }} disabled={selectedProbIndex === 0}>
+
+          <button
+            className="lc-pnav-btn"
+            disabled={selectedProbIndex === 0}
+            onClick={() => {
+              if (selectedProbIndex > 0) setSelectedProb(contest.problemDetails[selectedProbIndex - 1]);
+            }}
+            title="Previous Problem"
+          >
             <ChevronLeft size={16} />
           </button>
-          <button className="lc-nav-btn" onClick={() => {
-            if (contest.problemDetails && selectedProbIndex < contest.problemDetails.length - 1) {
-              setSelectedProb(contest.problemDetails[selectedProbIndex + 1]);
-            }
-          }} disabled={!contest.problemDetails || selectedProbIndex === contest.problemDetails.length - 1}>
+
+          <button
+            className="lc-pnav-btn"
+            disabled={!contest.problemDetails || selectedProbIndex === contest.problemDetails.length - 1}
+            onClick={() => {
+              if (contest.problemDetails && selectedProbIndex < contest.problemDetails.length - 1) {
+                setSelectedProb(contest.problemDetails[selectedProbIndex + 1]);
+              }
+            }}
+            title="Next Problem"
+          >
             <ChevronRight size={16} />
           </button>
-          <button className="lc-nav-btn" onClick={() => {
-            if (contest.problemDetails && contest.problemDetails.length > 0) {
-              const randIdx = Math.floor(Math.random() * contest.problemDetails.length);
-              setSelectedProb(contest.problemDetails[randIdx]);
-              toast.success('Shuffled to random problem!');
-            }
-          }}>
-            <Shuffle size={15} />
-          </button>
+
+          <div className="lc-pnav-divider" />
+
+          {/* Active Problem Pill */}
+          {selectedProb && (
+            <div className="lc-pnav-active-pill">
+              {submissions.some(s => (s.problemId === selectedProb.id || s.problemId?._id === selectedProb.id) && s.verdict === 'AC') && (
+                <CheckCircle2 size={14} color="#10b981" />
+              )}
+              <span className="lc-pnav-active-title">{selectedProbIndex + 1}. {selectedProb.title}</span>
+              <span className={`badge-diff ${selectedProb.difficulty || 'medium'}`}>
+                {selectedProb.difficulty || 'medium'}
+              </span>
+              <span className="badge-meta">{selectedProb.points || 100} pts</span>
+            </div>
+          )}
         </div>
 
-        <div className="lc-nav-center">
-          <button className="lc-nav-btn" title="Debug code" disabled={selectedProb?.source === 'leetcode'}>
-            <Bug size={16} />
-          </button>
+        {/* Center: Language & Run / Submit Controls */}
+        <div className="lc-pnav-center">
+          {/* Language Selector */}
+          <select
+            className="lc-plang-select"
+            value={selectedLang}
+            onChange={(e) => {
+              const newLang = e.target.value;
+              setSelectedLang(newLang);
+              const probId = selectedProb?.id || selectedProb?._id;
+              const draft = loadCodeDraft(user?.id, probId, newLang, id);
+              if (draft && draft.code && draft.code.trim()) {
+                setCode(draft.code);
+              } else {
+                setCode(getStarterCode(selectedProb, newLang));
+              }
+              toast.success(`Language: ${LANG_LABELS[newLang] || newLang}`);
+            }}
+          >
+            {((contest.allowedLangs && contest.allowedLangs.length > 0) ? contest.allowedLangs : Object.keys(LANG_LABELS)).map((l) => (
+              <option key={l} value={l}>
+                {LANG_LABELS[l] || l}
+              </option>
+            ))}
+          </select>
+
           {selectedProb?.source === 'leetcode' ? (
-            <button className="lc-btn-submit" onClick={handleManualSync} disabled={lcSyncing} style={{ background: '#FFA116', borderColor: '#FFA116', color: '#000', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
-              <RefreshCw size={14} className={lcSyncing ? 'animate-spin' : ''} /> Sync LeetCode
+            <button className="btn-submit" onClick={handleManualSync} disabled={lcSyncing} style={{ background: '#FFA116', borderColor: '#FFA116', color: '#000', fontWeight: 700 }}>
+              <RefreshCw size={13} className={lcSyncing ? 'animate-spin' : ''} /> Sync LeetCode
             </button>
           ) : (
             <>
-              <button className="lc-btn-run" onClick={handleRunCode}>
-                <Play size={14} fill="currentColor" /> Run
+              <button
+                className="btn-run"
+                onClick={handleRunCode}
+                disabled={runResult === 'running'}
+              >
+                {runResult === 'running' ? <RefreshCw size={13} className="animate-spin" /> : <Play size={13} fill="currentColor" />}
+                <span>Run</span>
               </button>
-              <button className="lc-btn-submit" onClick={handleSubmitCode}>
-                <Upload size={14} /> Submit
+              <button
+                className="btn-submit"
+                onClick={handleSubmitCode}
+                disabled={runResult === 'running'}
+              >
+                <Upload size={13} />
+                <span>Submit</span>
               </button>
             </>
           )}
-          <button className="lc-nav-btn" onClick={toggleConsole} title="Toggle Console View" disabled={selectedProb?.source === 'leetcode'}>
-            <Terminal size={16} />
+
+          <button className="lc-pnav-btn" onClick={toggleConsole} title="Toggle Console Output">
+            <Terminal size={15} />
           </button>
-          {contest.aiEnabled ? (
-            <button className="lc-btn-sparkle" onClick={() => setShowAiModal(true)}>
-              <Sparkles size={14} /> AI Sparkle
-            </button>
-          ) : (
-            <span className="text-[10px] text-gray-500 bg-white/5 px-2.5 py-1 rounded-full border border-white/5">🚫 AI Blocked</span>
-          )}
         </div>
 
-        <div className="lc-nav-right">
-          {tabAlerts > 0 && (
-            <span className="text-[10px] text-red-400 bg-red-950/40 border border-red-500/20 px-2 py-0.5 rounded-full flex items-center" title="Tab Switch Violations">
-              🚨 Tab switches: {tabAlerts}
+        {/* Right: Proctoring status, Timer & End Contest */}
+        <div className="lc-pnav-right">
+          {user.role === 'student' && (
+            <span className={`text-[11px] font-bold px-2.5 py-1 rounded-full flex items-center gap-1.5 border ${
+              violationsCount === 0 ? 'bg-emerald-950/40 text-emerald-400 border-emerald-500/20' :
+              violationsCount === 1 ? 'bg-amber-950/50 text-amber-400 border-amber-500/30' :
+              'bg-red-950/60 text-red-400 border-red-500/40 animate-pulse'
+            }`} title={`Proctoring Strikes: ${violationsCount}/3 (3 strikes = auto-disqualification)`}>
+              <ShieldAlert size={13} />
+              <span>Strikes: {violationsCount}/3</span>
             </span>
           )}
-          {fullscreenExits > 0 && (
-            <span className="text-[10px] text-amber-400 bg-amber-950/40 border border-amber-500/20 px-2 py-0.5 rounded-full flex items-center" title="Fullscreen Exit Violations">
-              🚨 Fullscreen exits: {fullscreenExits}
+
+          {camOn && (
+            <span className="text-[11px] font-semibold px-2 py-0.5 rounded bg-red-950/40 text-red-400 border border-red-500/30 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse" />
+              Cam Active
             </span>
           )}
-          <button className="lc-nav-btn" onClick={startCamera} title={camOn ? `Proctoring Cam Active (Mic: ${micOn ? 'ON' : 'OFF'})` : 'Enable Proctoring Cam'}>
-            <Video size={16} className={camOn ? 'text-red-500' : 'text-gray-400'} />
-          </button>
-          <button className="lc-nav-btn" title="Layout Options">
-            <LayoutGrid size={16} />
-          </button>
-          <button className="lc-nav-btn" title="Settings">
-            <Settings size={16} />
-          </button>
-          <div className="lc-nav-divider" />
-          
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-            <span style={{ fontSize: '12px', color: 'var(--accent-amber)', display: 'flex', alignItems: 'center' }}>
-              <Flame size={14} fill="currentColor" style={{ marginRight: '2px' }} /> {user.rating || 0}
-            </span>
-          </div>
 
-          <button
-            className={`lc-timer-display lc-nav-btn ${timeLeft !== null && timeLeft < 300 ? 'red' : ''}`}
-            style={{ color: 'var(--accent-amber)' }}
-            onClick={() => {
-              setIsTimerPaused(!isTimerPaused);
-              toast(isTimerPaused ? 'Timer Resumed' : 'Timer Paused', { icon: '⏱️' });
-            }}
-          >
-            {isTimerPaused ? <Play size={12} fill="currentColor" /> : <Pause size={12} fill="currentColor" />}
-            <span style={{ marginLeft: '4px', fontSize: '12px' }}>{timeLeft === null ? '--:--:--' : formatTimer(timeLeft)}</span>
-          </button>
-
-          <button className="lc-nav-btn" onClick={() => loadData()}>
-            <RotateCw size={14} />
-          </button>
-          <button className="lc-nav-btn">
-            <UserPlus size={16} />
-          </button>
-          <div className="lc-premium-badge">Pre</div>
           <div
-            className="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-xs font-bold border border-white/20 cursor-pointer uppercase"
-            onClick={() => navigate(`/profile/${user.enrollment}`)}
+            className={`lc-timer-box flex items-center gap-1.5 px-2.5 py-1 rounded border ${timeLeft !== null && timeLeft < 300 ? 'bg-red-950/50 text-red-400 border-red-500/40 animate-pulse' : 'bg-white/5 text-amber-400 border-white/10'}`}
+            style={{ fontSize: '12px', fontWeight: 700 }}
           >
-            {user.avatar || user.name?.substring(0,2) || 'YP'}
+            <Clock size={13} />
+            <span>{timeLeft === null ? '--:--:--' : formatTimer(timeLeft)}</span>
           </div>
+
+          <div className="lc-pnav-divider" />
+
+          {/* End Contest Action Button */}
+          <button
+            onClick={() => setShowEndModal(true)}
+            title="Conclude exam & submit all results"
+            style={{
+              background: 'rgba(239, 68, 68, 0.15)',
+              border: '1px solid rgba(239, 68, 68, 0.35)',
+              color: '#f87171',
+              fontWeight: 700,
+              fontSize: '12px',
+              padding: '4px 12px',
+              borderRadius: '6px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '6px',
+              cursor: 'pointer',
+              transition: 'all 0.15s ease'
+            }}
+            onMouseOver={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.25)'}
+            onMouseOut={e => e.currentTarget.style.background = 'rgba(239, 68, 68, 0.15)'}
+          >
+            <LogOut size={13} />
+            <span>End Contest</span>
+          </button>
         </div>
       </nav>
 
       {/* MAIN WORKSPACE split view */}
-      <div className="lc-workspace">
+      <div className="lc-pworkspace">
         {/* LEFT PANEL */}
         <div
-          className="lc-left-panel"
+          className="lc-pleft-panel"
           style={{ width: isLeftFullscreen ? '100%' : `${splitWidth}%` }}
         >
           {/* Tabs header */}
-          <div className="lc-tab-bar">
-            <div className="lc-tabs-left">
+          <div className="lc-ptabs-header">
+            <button
+              className={`lc-ptab-btn ${activeLeftTab === 'description' ? 'active' : ''}`}
+              onClick={() => setActiveLeftTab('description')}
+            >
+              📋 Description
+            </button>
+            <button
+              className={`lc-ptab-btn ${activeLeftTab === 'submissions' ? 'active' : ''}`}
+              onClick={() => setActiveLeftTab('submissions')}
+            >
+              📊 My Submissions ({submissions.length})
+            </button>
+            <button
+              className={`lc-ptab-btn ${activeLeftTab === 'leaderboard' ? 'active' : ''}`}
+              onClick={() => setActiveLeftTab('leaderboard')}
+            >
+              🏆 Leaderboard
+            </button>
+            {announcements.length > 0 && (
               <button
-                className={`lc-tab ${activeLeftTab === 'description' ? 'active' : ''}`}
-                onClick={() => setActiveLeftTab('description')}
-              >
-                📋 Description
-              </button>
-              <button
-                className={`lc-tab ${activeLeftTab === 'editorial' ? 'active' : ''}`}
-                onClick={() => setActiveLeftTab('editorial')}
-              >
-                📖 Editorial
-              </button>
-              <button
-                className={`lc-tab ${activeLeftTab === 'solutions' ? 'active' : ''}`}
-                onClick={() => setActiveLeftTab('solutions')}
-              >
-                💬 Q&A Forum
-              </button>
-              <button
-                className={`lc-tab ${activeLeftTab === 'submissions' ? 'active' : ''}`}
-                onClick={() => setActiveLeftTab('submissions')}
-              >
-                📊 Submissions
-              </button>
-              <button
-                className={`lc-tab ${activeLeftTab === 'leaderboard' ? 'active' : ''}`}
-                onClick={() => setActiveLeftTab('leaderboard')}
-              >
-                🏆 Leaderboard
-              </button>
-              <button
-                className={`lc-tab ${activeLeftTab === 'announcements' ? 'active' : ''}`}
+                className={`lc-ptab-btn ${activeLeftTab === 'announcements' ? 'active' : ''}`}
                 onClick={() => setActiveLeftTab('announcements')}
               >
-                📢 Alerts
+                📢 Alerts ({announcements.length})
               </button>
-            </div>
-            <div className="lc-tabs-right">
+            )}
+
+            <div style={{ marginLeft: 'auto' }}>
               <button
-                className="lc-nav-btn"
+                className="lc-pnav-btn"
                 onClick={() => setIsLeftFullscreen(!isLeftFullscreen)}
                 title={isLeftFullscreen ? 'Collapse screen' : 'Expand full screen'}
               >
-                {isLeftFullscreen ? <Minimize2 size={15} /> : <Maximize2 size={15} />}
+                {isLeftFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
               </button>
             </div>
           </div>
 
           {/* Left panel scrollable body */}
-          <div className="lc-panel-content">
+          <div className="lc-ptabs-body">
             {activeLeftTab === 'description' && selectedProb && (
-              <div className="lc-prose">
-                <div className="lc-problem-title-row">
-                  <h1 className="lc-problem-title">{selectedProbIndex + 1}. {selectedProb.title}</h1>
-                  {submissions.some(s => (s.problemId === selectedProb.id || s.problemId?._id === selectedProb.id) && s.verdict === 'AC') && (
-                    <span className="lc-solved-badge">Solved ✓</span>
-                  )}
-                </div>
-
-                <div className="lc-meta-row">
-                  <span className={`lc-diff-pill ${selectedProb.difficulty}`}>
-                    {selectedProb.difficulty}
-                  </span>
-                  <span className="lc-meta-tag">Points: {selectedProb.points}</span>
-                  <span className="lc-meta-tag">Limit: {selectedProb.timeLimit}s</span>
-                  {contest.aiEnabled && contest.aiHints && (
-                    <button className="lc-meta-tag text-indigo-400 hover:text-indigo-300" onClick={getHint}>
-                      💡 Get Hint
-                    </button>
-                  )}
-                </div>
-
-                <p>{selectedProb.statement}</p>
-
-                {/* LeetCode Open Redirect Box */}
-                {selectedProb.source === 'leetcode' && selectedProb.leetcodeUrl && (
-                  <div style={{ margin: '16px 0', padding: '12px 16px', borderRadius: '8px', background: 'rgba(255, 161, 22, 0.08)', border: '1px solid rgba(255, 161, 22, 0.2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <span style={{ fontSize: '18px' }}>🔗</span>
-                      <div>
-                        <div style={{ fontSize: '13px', fontWeight: 700, color: '#FFA116' }}>This is a LeetCode problem</div>
-                        <div style={{ fontSize: '11px', color: '#a0a0a0' }}>Solve it on LeetCode directly, then sync your progress.</div>
-                      </div>
-                    </div>
-                    <a
-                      href={selectedProb.leetcodeUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      style={{ display: 'flex', alignItems: 'center', gap: '6px', padding: '6px 14px', borderRadius: '6px', background: '#FFA116', color: '#000', fontWeight: 700, fontSize: '12px', textDecoration: 'none', whiteSpace: 'nowrap' }}
-                    >
-                      <ExternalLink size={13} /> Open on LeetCode
-                    </a>
+              <div>
+                <div style={{ marginBottom: '14px' }}>
+                  <h1 className="lc-pdesc-title">{selectedProbIndex + 1}. {selectedProb.title}</h1>
+                  <div className="lc-pdesc-badges">
+                    <span className={`badge-diff ${selectedProb.difficulty || 'medium'}`}>
+                      {selectedProb.difficulty || 'medium'}
+                    </span>
+                    <span className="badge-meta">Points: {selectedProb.points || 100}</span>
+                    <span className="badge-meta">Time Limit: {selectedProb.timeLimit || 2}s</span>
+                    {submissions.some(s => (s.problemId === selectedProb.id || s.problemId?._id === selectedProb.id) && s.verdict === 'AC') && (
+                      <span className="badge-meta" style={{ color: '#10b981', fontWeight: 700 }}>Solved ✓</span>
+                    )}
                   </div>
-                )}
+                </div>
 
-                {/* SVG sorting list representation only if it is Sort List */}
-                {isSortListProblem && (
-                  <div className="lc-example-box">
-                    <div className="lc-example-title font-bold">Example 1:</div>
-                    <div className="lc-svg-diagram">
-                      <svg width="340" height="180" viewBox="0 0 340 180">
-                        <defs>
-                          <marker id="arrow" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                            <path d="M 0 0 L 10 5 L 0 10 z" fill="#9c9a92" />
-                          </marker>
-                          <marker id="arrow-active" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                            <path d="M 0 0 L 10 5 L 0 10 z" fill="#f0a500" />
-                          </marker>
-                        </defs>
-                        <g>
-                          <circle cx="40" cy="40" r="28" className="lc-svg-node-circle" />
-                          <text x="40" y="40" className="lc-svg-node-text">4</text>
-                          <line x1="68" y1="40" x2="90" y2="40" className="lc-svg-arrow" marker-end="url(#arrow)" />
-                          <circle cx="120" cy="40" r="28" className="lc-svg-node-circle" />
-                          <text x="120" y="40" className="lc-svg-node-text">2</text>
-                          <line x1="148" y1="40" x2="170" y2="40" className="lc-svg-arrow" marker-end="url(#arrow)" />
-                          <circle cx="200" cy="40" r="28" className="lc-svg-node-circle" />
-                          <text x="200" y="40" className="lc-svg-node-text">1</text>
-                          <line x1="228" y1="40" x2="250" y2="40" className="lc-svg-arrow" marker-end="url(#arrow)" />
-                          <circle cx="280" cy="40" r="28" className="lc-svg-node-circle" />
-                          <text x="280" y="40" className="lc-svg-node-text">3</text>
-                        </g>
-                        <line x1="160" y1="74" x2="160" y2="102" className="lc-svg-down-arrow" marker-end="url(#arrow-active)" />
-                        <g>
-                          <circle cx="40" cy="140" r="28" className="lc-svg-node-circle" />
-                          <text x="40" y="140" className="lc-svg-node-text">1</text>
-                          <line x1="68" y1="140" x2="90" y2="140" className="lc-svg-arrow" marker-end="url(#arrow)" />
-                          <circle cx="120" cy="140" r="28" className="lc-svg-node-circle" />
-                          <text x="120" y="140" className="lc-svg-node-text">2</text>
-                          <line x1="148" y1="140" x2="170" y2="140" className="lc-svg-arrow" marker-end="url(#arrow)" />
-                          <circle cx="200" cy="140" r="28" className="lc-svg-node-circle" />
-                          <text x="200" y="140" className="lc-svg-node-text">3</text>
-                          <line x1="228" y1="140" x2="250" y2="140" className="lc-svg-arrow" marker-end="url(#arrow)" />
-                          <circle cx="280" cy="140" r="28" className="lc-svg-node-circle" />
-                          <text x="280" y="140" className="lc-svg-node-text">4</text>
-                        </g>
-                      </svg>
+                {/* Problem Statement */}
+                <div className="lc-psection">
+                  <h3 className="lc-psection-title">Problem Statement</h3>
+                  <div className="lc-pstatement-text" style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6', color: '#cbd5e1' }}>
+                    {(selectedProb.statement || selectedProb.description || 'No description provided.').replace(/\\n/g, '\n')}
+                  </div>
+                </div>
+
+                {/* Input Format */}
+                {selectedProb.inputFormat && (
+                  <div className="lc-psection">
+                    <h3 className="lc-psection-title">Input Format</h3>
+                    <div className="lc-pformat-box" style={{ whiteSpace: 'pre-wrap' }}>
+                      {selectedProb.inputFormat.replace(/\\n/g, '\n')}
                     </div>
                   </div>
                 )}
 
-                {/* Example 1 Output Box */}
-                {selectedProb.sampleInput && (
-                  <div className="lc-example-box">
-                    <div className="lc-example-title font-bold">Sample Example:</div>
-                    <div className="lc-example-body">
-                      <pre className="lc-example-pre">
-<strong>Input:</strong>
-{selectedProb.sampleInput}
-
-<strong>Output:</strong>
-{selectedProb.sampleOutput}
-                      </pre>
+                {/* Output Format */}
+                {selectedProb.outputFormat && (
+                  <div className="lc-psection">
+                    <h3 className="lc-psection-title">Output Format</h3>
+                    <div className="lc-pformat-box" style={{ whiteSpace: 'pre-wrap' }}>
+                      {selectedProb.outputFormat.replace(/\\n/g, '\n')}
                     </div>
                   </div>
                 )}
 
                 {/* Constraints */}
                 {selectedProb.constraints && (
-                  <div style={{ marginTop: '20px' }}>
-                    <div className="lc-example-title font-bold">Constraints:</div>
-                    <pre className="bg-white/5 p-4 rounded-md text-xs text-gray-300 font-mono overflow-x-auto">{selectedProb.constraints}</pre>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {activeLeftTab === 'editorial' && selectedProb && (
-              <div className="lc-editorial-body lc-prose">
-                <div className="lc-editorial-section">
-                  <h3 className="font-bold uppercase tracking-wider text-xs text-indigo-400">Optimal Algorithm Concept</h3>
-                  <p>{selectedProb.optimalAlgorithm || 'Algorithm documentation is currently being reviewed for this problem set. Standard solutions apply.'}</p>
-                </div>
-                {selectedProb.editorial && (
-                  <div className="lc-editorial-section">
-                    <h3 className="font-bold uppercase tracking-wider text-xs text-indigo-400">Editorial Details</h3>
-                    <p>{selectedProb.editorial}</p>
-                  </div>
-                )}
-                {selectedProb.explanation && (
-                  <div className="lc-editorial-section">
-                    <h3 className="font-bold uppercase tracking-wider text-xs text-indigo-400">Complexity & Constraints Walkthrough</h3>
-                    <p>{selectedProb.explanation}</p>
-                  </div>
-                )}
-              </div>
-            )}
-
-            {activeLeftTab === 'solutions' && (
-              <div className="lc-forum-container">
-                {/* Forum Create Post */}
-                <div className="lc-forum-form">
-                  <span className="text-xs font-semibold text-white">Ask a Question / Post Solution</span>
-                  <input
-                    type="text"
-                    placeholder="Thread Title..."
-                    className="bg-white/5 border border-white/10 rounded px-3 py-1.5 text-xs text-white outline-none focus:border-indigo-500"
-                    value={newDiscTitle}
-                    onChange={e => setNewDiscTitle(e.target.value)}
-                  />
-                  <textarea
-                    rows={2}
-                    placeholder="Provide details of your question or approach..."
-                    className="bg-white/5 border border-white/10 rounded px-3 py-1.5 text-xs text-white outline-none focus:border-indigo-500"
-                    value={newDiscBody}
-                    onChange={e => setNewDiscBody(e.target.value)}
-                  />
-                  <button
-                    className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold py-1.5 rounded transition-colors self-end px-4"
-                    onClick={handlePostDiscussion}
-                    disabled={postingDisc}
-                  >
-                    {postingDisc ? 'Posting...' : 'Post Thread'}
-                  </button>
-                </div>
-
-                {/* Forum list */}
-                {discussions.map((d) => (
-                  <div
-                    key={d._id || d.id}
-                    className="lc-forum-item"
-                    onClick={() => setExpandedThreadId(expandedThreadId === d._id ? null : d._id)}
-                  >
-                    <div className="lc-forum-title">{d.title}</div>
-                    <div className="lc-forum-body">{d.body}</div>
-                    <div className="lc-forum-meta">
-                      <span>👤 {d.userId?.name || 'Student'}</span>
-                      <span>💬 {d.answers?.length || 0} replies</span>
+                  <div className="lc-psection">
+                    <h3 className="lc-psection-title">Constraints</h3>
+                    <div className="lc-pconstraints-box">
+                      {selectedProb.constraints.replace(/\\n/g, '\n').split('\n').map((c, i) => (
+                        <div key={i} className="lc-pconstraint-item">
+                          <code>{c}</code>
+                        </div>
+                      ))}
                     </div>
+                  </div>
+                )}
 
-                    {expandedThreadId === d._id && d.answers && d.answers.length > 0 && (
-                      <div className="lc-forum-replies-list" onClick={e => e.stopPropagation()}>
-                        {d.answers.map((ans, idx) => (
-                          <div key={idx} className="lc-forum-reply">
-                            <div className="text-[10px] text-indigo-300 font-bold mb-1">{ans.userId?.name || 'Contributor'}:</div>
-                            <div>{ans.body}</div>
-                          </div>
-                        ))}
+                {/* Sample Testcases */}
+                {((selectedProb.testCases && selectedProb.testCases.filter(t => t.type === 'sample').length > 0)
+                  ? selectedProb.testCases.filter(t => t.type === 'sample')
+                  : (selectedProb.sampleInput ? [{ input: selectedProb.sampleInput, output: selectedProb.sampleOutput || '' }] : [])
+                ).map((tc, i) => (
+                  <div key={i} className="lc-pexample-card">
+                    <div className="lc-pexample-head">
+                      <span>Sample Example {i + 1}</span>
+                    </div>
+                    <div className="lc-pexample-block">
+                      <div className="lc-pexample-label">Input:</div>
+                      <pre className="lc-pexample-code">{tc.input !== undefined ? tc.input.replace(/\\n/g, '\n') : '(empty)'}</pre>
+                    </div>
+                    <div className="lc-pexample-block">
+                      <div className="lc-pexample-label">Output:</div>
+                      <pre className="lc-pexample-code">{tc.output !== undefined ? tc.output.replace(/\\n/g, '\n') : '(empty)'}</pre>
+                    </div>
+                    {selectedProb.explanation && i === 0 && (
+                      <div className="lc-pexample-explanation">
+                        <strong>Explanation:</strong> {selectedProb.explanation}
                       </div>
                     )}
                   </div>
                 ))}
-                {discussions.length === 0 && <div className="text-center text-xs text-gray-500 py-6">No discussions posted yet. Be the first!</div>}
               </div>
             )}
 
@@ -1348,9 +1620,7 @@ export default function ContestArena() {
                 <div style={{ display: 'flex', padding: '10px 14px', borderBottom: '1px solid var(--border)', fontSize: '10px', color: 'var(--text-secondary)', textTransform: 'uppercase', fontWeight: 'bold' }}>
                   <div style={{ width: '40px' }}>Rank</div>
                   <div style={{ flex: 1 }}>Student</div>
-                  <div style={{ width: '60px', textAlign: 'center' }}>HWB ✅</div>
-                  <div style={{ width: '60px', textAlign: 'center' }}>LC ✅</div>
-                  <div style={{ width: '60px', textAlign: 'center' }}>Total</div>
+                  <div style={{ width: '60px', textAlign: 'center' }}>Solved</div>
                   <div style={{ width: '80px', textAlign: 'right' }}>Score</div>
                 </div>
                 {leaderboard.map((item, idx) => (
@@ -1360,9 +1630,7 @@ export default function ContestArena() {
                       <div className="font-semibold text-white text-xs">{item.name}</div>
                       <div className="text-[9px] text-gray-400">{item.department || 'CE'} · {item.enrollment}</div>
                     </div>
-                    <div style={{ width: '60px', textAlign: 'center', fontSize: '12px', fontWeight: 'semibold', color: '#2cbb5d' }}>{item.hwbSolved ?? item.solved ?? 0}</div>
-                    <div style={{ width: '60px', textAlign: 'center', fontSize: '12px', fontWeight: 'semibold', color: '#FFA116' }}>{item.lcSolved ?? 0}</div>
-                    <div style={{ width: '60px', textAlign: 'center', fontSize: '12px', fontWeight: 'bold' }}>{item.solved ?? 0}</div>
+                    <div style={{ width: '60px', textAlign: 'center', fontSize: '12px', fontWeight: 'bold', color: '#10b981' }}>{item.solved ?? 0}</div>
                     <div style={{ width: '80px', textAlign: 'right', fontWeight: 'bold', fontSize: '12px', color: 'var(--accent-purple)' }}>
                       {item.points || 0} pts
                     </div>
@@ -1383,40 +1651,6 @@ export default function ContestArena() {
                 {announcements.length === 0 && <div className="text-center text-xs text-gray-500 py-6">No updates broadcasted by faculty yet.</div>}
               </div>
             )}
-          </div>
-
-          {/* Left panel status footer bar */}
-          <div className="lc-status-bar">
-            <div className="lc-status-left">
-              <span className="lc-status-action">👍 13.1K</span>
-              <span className="lc-status-action">👎</span>
-              <span className="lc-status-action">💬 {discussions.length}</span>
-              
-              <span
-                className={`lc-status-action ${bookmarked ? 'active' : ''}`}
-                onClick={() => {
-                  setBookmarked(!bookmarked);
-                  toast.success(bookmarked ? 'Bookmark removed' : 'Problem bookmarked!');
-                }}
-              >
-                <Star size={14} fill={bookmarked ? 'currentColor' : 'none'} /> {bookmarked ? 'Bookmarked' : 'Bookmark'}
-              </span>
-
-              <span className="lc-status-action" onClick={() => {
-                navigator.clipboard.writeText(window.location.href);
-                toast.success('Link copied to clipboard!');
-              }}>
-                <Share2 size={14} /> Share
-              </span>
-            </div>
-            <div className="lc-status-right">
-              <span className="lc-status-action">
-                <HelpCircle size={14} /> Help
-              </span>
-              <span className="flex items-center gap-1">
-                <span className="lc-online-dot" /> 59 Online
-              </span>
-            </div>
           </div>
         </div>
 
@@ -1468,29 +1702,8 @@ export default function ContestArena() {
               {/* Header Bar */}
               <div className="lc-editor-header">
                 <div className="lc-editor-header-left">
-                  <select
-                    className="lc-select-lang"
-                    value={selectedLang}
-                    onChange={(e) => {
-                      setSelectedLang(e.target.value);
-                      toast.success(`Switched environment to ${LANG_LABELS[e.target.value]}`);
-                    }}
-                  >
-                    {contest.allowedLangs?.map((l) => (
-                      <option key={l} value={l}>
-                        {LANG_LABELS[l] || l}
-                      </option>
-                    )) || (
-                      <>
-                        <option value="cpp17">C++</option>
-                        <option value="python3">Python3</option>
-                        <option value="java17">Java</option>
-                        <option value="c">C</option>
-                      </>
-                    )}
-                  </select>
-                  <span className="lc-autosave-indicator ml-2">
-                    <Lock size={11} /> Auto
+                  <span className="lc-autosave-indicator" style={{ display: 'flex', alignItems: 'center', gap: '4px', fontSize: '11px', color: 'var(--text-3)' }}>
+                    <Lock size={11} /> {LANG_LABELS[selectedLang] || selectedLang} · Auto-saved
                   </span>
                 </div>
                 <div className="lc-editor-header-right">
@@ -1589,17 +1802,65 @@ export default function ContestArena() {
                         <div className="text-xs text-gray-500">Executing sandbox Piston compile</div>
                       </div>
                     ) : (
-                      <div className="lc-result-box">
-                        <div className="lc-result-status-row">
-                          <span className={`lc-result-status-badge ${runResult.status.toLowerCase()}`}>
-                            {runResult.status}
-                          </span>
-                          <span className="lc-result-runtime">
-                            Verdict returned by judge
+                      <div className="lc-result-box" style={{ overflowY: 'auto', maxHeight: '240px' }}>
+                        <div className="lc-result-status-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span className={`lc-result-status-badge ${runResult.status.toLowerCase()}`}>
+                              {runResult.status}
+                            </span>
+                            {runResult.testsPassed !== undefined && (
+                              <span style={{ fontSize: '11px', color: '#94a3b8', background: 'rgba(255,255,255,0.06)', padding: '2px 8px', borderRadius: '4px' }}>
+                                {runResult.testsPassed} / {runResult.totalTests} Passed
+                              </span>
+                            )}
+                          </div>
+                          <span className="lc-result-runtime" style={{ fontSize: '11px', color: '#94a3b8' }}>
+                            {runResult.timeMs !== undefined ? `⏱️ ${runResult.timeMs}ms` : 'Verdict returned by judge'}
                           </span>
                         </div>
 
-                        {runResult.outputs[0] && (
+                        {/* Stderr or compiler logs */}
+                        {runResult.stderr && (
+                          <div style={{ marginTop: '8px', marginBottom: '8px', padding: '8px 10px', background: 'rgba(244, 63, 94, 0.1)', border: '1px solid rgba(244, 63, 94, 0.3)', borderRadius: '6px' }}>
+                            <div style={{ fontWeight: 700, fontSize: '11px', color: '#f43f5e', marginBottom: '4px' }}>Compiler & Diagnostics Log:</div>
+                            <pre style={{ margin: 0, fontSize: '11px', color: '#fda4af', whiteSpace: 'pre-wrap', maxHeight: '120px', overflowY: 'auto' }}>{runResult.stderr}</pre>
+                          </div>
+                        )}
+
+                        {runResult.testResults && runResult.testResults.length > 0 ? (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginTop: '6px' }}>
+                            {runResult.testResults.map((tr, idx) => (
+                              <div key={idx} style={{ background: 'rgba(15, 23, 42, 0.6)', border: `1px solid ${tr.passed ? 'rgba(16, 185, 129, 0.3)' : 'rgba(239, 68, 68, 0.4)'}`, borderRadius: '6px', padding: '8px' }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                                  <span style={{ fontSize: '11px', fontWeight: 700, color: tr.passed ? '#10b981' : '#ef4444' }}>
+                                    Test Case #{idx + 1} ({tr.type}) — {tr.passed ? 'PASSED ✓' : 'FAILED ✗'}
+                                  </span>
+                                  <span style={{ fontSize: '10px', color: '#94a3b8' }}>{tr.timeMs}ms</span>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '6px' }}>
+                                  <div>
+                                    <div style={{ fontSize: '10px', color: '#94a3b8', marginBottom: '2px' }}>📥 Input:</div>
+                                    <pre style={{ margin: 0, padding: '4px 6px', background: '#020617', border: '1px solid rgba(129, 140, 248, 0.2)', borderRadius: '4px', fontSize: '11px', color: '#e2e8f0', whiteSpace: 'pre-wrap', maxHeight: '60px', overflowY: 'auto' }}>
+                                      {tr.input || '(empty)'}
+                                    </pre>
+                                  </div>
+                                  <div>
+                                    <div style={{ fontSize: '10px', color: '#94a3b8', marginBottom: '2px' }}>✅ Expected Output:</div>
+                                    <pre style={{ margin: 0, padding: '4px 6px', background: '#020617', border: '1px solid rgba(255, 255, 255, 0.1)', borderRadius: '4px', fontSize: '11px', color: '#e2e8f0', whiteSpace: 'pre-wrap', maxHeight: '60px', overflowY: 'auto' }}>
+                                      {tr.expectedOutput || '(empty)'}
+                                    </pre>
+                                  </div>
+                                  <div>
+                                    <div className="text-xs font-semibold text-slate-400 mb-1">Actual Output:</div>
+                                    <pre className="p-2 rounded bg-slate-900/80 border border-slate-700/60 font-mono text-xs text-slate-300 whitespace-pre-wrap max-h-32 overflow-y-auto">
+                                      {tr.actualOutput || (tr.stderr ? `[Runtime Error]\n${tr.stderr}` : '(empty)')}
+                                    </pre>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : runResult.outputs && runResult.outputs[0] ? (
                           <div>
                             <div className="lc-result-data-row">
                               <div className="lc-result-data-label">Input Tested</div>
@@ -1607,14 +1868,12 @@ export default function ContestArena() {
                                 {runResult.outputs[0].input}
                               </div>
                             </div>
-
                             <div className="lc-result-data-row">
                               <div className="lc-result-data-label">Output</div>
                               <div className="lc-result-data-value">
                                 {runResult.outputs[0].output}
                               </div>
                             </div>
-
                             <div className="lc-result-data-row">
                               <div className="lc-result-data-label">Expected Sample Output</div>
                               <div className="lc-result-data-value">
@@ -1622,7 +1881,7 @@ export default function ContestArena() {
                               </div>
                             </div>
                           </div>
-                        )}
+                        ) : null}
                       </div>
                     )}
                   </div>
@@ -1724,6 +1983,94 @@ export default function ContestArena() {
           </div>
         </div>
       )}
+
+      {/* 🚪 End Contest Confirmation Modal */}
+      {showEndModal && (
+        <div className="proctor-violation-modal-overlay" style={{ zIndex: 9999 }}>
+          <div className="proctor-violation-card" style={{ maxWidth: '420px' }}>
+            <LogOut size={44} className="mx-auto mb-3" style={{ color: '#f87171' }} />
+            <h2 className="text-xl font-bold text-white mb-2">End Contest?</h2>
+            <p className="text-xs text-gray-400 mb-5 leading-relaxed">
+              Are you sure you want to end this contest early? Your current submissions are already saved.
+              You will <strong style={{ color: '#f87171' }}>not</strong> be able to re-enter once you leave.
+            </p>
+
+            <div style={{ background: 'rgba(239,68,68,0.08)', border: '1px solid rgba(239,68,68,0.25)', borderRadius: '10px', padding: '12px 14px', marginBottom: '20px', textAlign: 'left' }}>
+              <div style={{ fontWeight: 700, fontSize: '11px', color: '#f87171', marginBottom: '6px' }}>Before you leave:</div>
+              <ul style={{ fontSize: '11px', color: '#94a3b8', margin: 0, paddingLeft: '16px', lineHeight: '1.7' }}>
+                <li>All submitted code is already saved to the database.</li>
+                <li>Camera and proctoring session will be terminated.</li>
+                <li>Your score will be calculated from existing submissions.</li>
+              </ul>
+            </div>
+
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <button
+                className="btn btn-primary"
+                style={{ flex: 1, padding: '10px', fontWeight: 700, background: 'rgba(239,68,68,0.85)', borderColor: 'rgba(239,68,68,0.6)' }}
+                onClick={handleEndContest}
+                disabled={endingContest}
+              >
+                {endingContest ? 'Ending...' : '✓ Yes, End Contest'}
+              </button>
+              <button
+                className="btn"
+                style={{ flex: 1, padding: '10px', fontWeight: 700, background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.12)', color: '#e2e8f0' }}
+                onClick={() => setShowEndModal(false)}
+                disabled={endingContest}
+              >
+                ✕ Stay in Exam
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ⚠️ Strike Warning Modal (Strikes 1 & 2) */}
+      {showViolationModal && !isDisqualified && (
+        <div className="proctor-violation-modal-overlay">
+          <div className="proctor-violation-card">
+            <AlertTriangle size={48} className="mx-auto text-amber-400 mb-3 animate-bounce" />
+            <h2 className="text-xl font-bold text-white mb-1">⚠️ Examination Violation Detected</h2>
+            <p className="text-xs text-amber-300 font-semibold mb-3">
+              {violationReason || 'You left the contest window or exited fullscreen mode.'}
+            </p>
+            
+            <div className="strike-pills-row">
+              <div className={`strike-pill ${violationsCount >= 1 ? 'active' : ''}`}>1</div>
+              <div className={`strike-pill ${violationsCount >= 2 ? 'active' : ''}`}>2</div>
+              <div className={`strike-pill ${violationsCount >= 3 ? 'final' : ''}`}>3</div>
+            </div>
+
+            <div className="bg-white/5 border border-white/10 rounded-xl p-3 mb-5 text-left text-xs text-gray-300">
+              <div className="font-bold text-red-400 mb-1">
+                {violationsCount === 1 ? '⚠️ Warning: 2 strikes remaining' : '🚨 FINAL WARNING: 1 strike remaining'}
+              </div>
+              <div>
+                {violationsCount === 1 
+                  ? 'Please remain inside the contest viewport. Exiting fullscreen or switching tabs 2 more times will automatically terminate your exam.'
+                  : 'CRITICAL: Any further window blur, tab switch, or fullscreen exit will instantly disqualify and submit your exam.'}
+              </div>
+            </div>
+
+            <button
+              className="btn btn-primary w-full py-2.5 font-bold flex items-center justify-center gap-2"
+              onClick={async () => {
+                setShowViolationModal(false);
+                try {
+                  if (document.documentElement.requestFullscreen) {
+                    await document.documentElement.requestFullscreen();
+                  }
+                } catch (e) {}
+              }}
+            >
+              <Maximize size={15} />
+              <span>Re-enter Fullscreen & Continue</span>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
+

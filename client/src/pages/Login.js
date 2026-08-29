@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import Logo from '../components/Logo';
 import './Login.css';
 
 export default function Login() {
@@ -37,8 +38,11 @@ export default function Login() {
   return (
     <div className="login-page">
       <div className="login-card">
-        <div className="login-logo"><div className="login-logo-icon">⌨</div><span>hack<b>with</b>bug</span></div>
+        <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '1.25rem' }}>
+          <Logo size={42} withText={true} subtitle="Competitive Programming" />
+        </div>
         <div className="login-tabs">
+
           <button className={tab==='login'?'active':''} onClick={()=>setTab('login')}>Sign in</button>
           <button className={tab==='register'?'active':''} onClick={()=>setTab('register')}>Create account</button>
         </div>

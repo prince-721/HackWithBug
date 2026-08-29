@@ -27,6 +27,12 @@ export default function DevDashboard() {
   const [contestFilter, setContestFilter] = useState('all');
   const [studentSearch, setStudentSearch] = useState('');
   const [expandedStudentId, setExpandedStudentId] = useState(null);
+  // Contest Submissions Viewer state
+  const [contestSubsData, setContestSubsData] = useState(null);
+  const [contestSubsLoading, setContestSubsLoading] = useState(false);
+  const [selectedContestForSubs, setSelectedContestForSubs] = useState(null);
+  const [expandedSubStudentId, setExpandedSubStudentId] = useState(null);
+  const [expandedSubCode, setExpandedSubCode] = useState(null);
 
   useEffect(() => {
     Promise.all([
@@ -166,6 +172,7 @@ export default function DevDashboard() {
       label: 'Reports',
       items: [
         { icon: '🎓', label: 'Student Tracker', handler: () => setActiveSection('students') },
+        { icon: '📄', label: 'Contest Submissions', handler: () => setActiveSection('contest-submissions') },
         { icon: '🛡', label: 'Plagiarism', handler: () => navigate('/dev/plagiarism') },
         { icon: '📋', label: 'Leaderboard', handler: () => setActiveSection('leaderboard') },
         { icon: '📹', label: 'Proctor Logs', handler: () => setActiveSection('proctoring') },
@@ -545,6 +552,250 @@ export default function DevDashboard() {
           </div>
         )}
 
+        {/* ─── CONTEST SUBMISSIONS VIEWER ─── */}
+        {activeSection === 'contest-submissions' && (
+          <div>
+            <h2 style={{ fontSize: '16px', fontWeight: 800, marginBottom: '1rem' }}>📄 Contest Student Submissions</h2>
+            
+            {/* Contest Selector */}
+            <div className="card card-body" style={{ marginBottom: '1rem' }}>
+              <div style={{ fontSize: '13px', fontWeight: 700, marginBottom: '8px' }}>Select a Contest</div>
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {contests.map(c => (
+                  <button
+                    key={c.id}
+                    className={`btn btn-sm ${selectedContestForSubs === c.id ? 'btn-primary' : 'btn-ghost'}`}
+                    onClick={async () => {
+                      setSelectedContestForSubs(c.id);
+                      setContestSubsLoading(true);
+                      setContestSubsData(null);
+                      setExpandedSubStudentId(null);
+                      setExpandedSubCode(null);
+                      try {
+                        const r = await api.get(`/contests/${c.id}/student-submissions`);
+                        setContestSubsData(r.data);
+                      } catch (err) {
+                        toast.error('Failed to load submissions');
+                      } finally {
+                        setContestSubsLoading(false);
+                      }
+                    }}
+                  >
+                    <span className={`badge ${c.status === 'live' ? 'badge-teal' : c.status === 'ended' ? 'badge-gray' : 'badge-purple'}`} style={{ fontSize: '9px', marginRight: '4px' }}>{c.status}</span>
+                    {c.title}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {contestSubsLoading && (
+              <div className="card card-body" style={{ textAlign: 'center', padding: '2rem' }}>
+                <div className="spinner" style={{ margin: '0 auto 12px' }} />
+                <div style={{ color: 'var(--text-3)', fontSize: '13px' }}>Loading student submissions...</div>
+              </div>
+            )}
+
+            {contestSubsData && !contestSubsLoading && (
+              <>
+                {/* KPI Row */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: '10px', marginBottom: '1rem' }}>
+                  {[
+                    [contestSubsData.totalStudents, 'Students', '👥', 'var(--purple)'],
+                    [contestSubsData.totalSubmissions, 'Total Submissions', '📝', 'var(--teal)'],
+                    [contestSubsData.contest?.problems?.length || 0, 'Problems', '📄', 'var(--amber)'],
+                    [contestSubsData.students?.filter(s => s.totalAC > 0).length || 0, 'Students with AC', '✅', 'var(--green, #2cbb5d)'],
+                  ].map(([v, l, icon, c]) => (
+                    <div key={l} className="card card-body" style={{ borderLeft: `3px solid ${c}` }}>
+                      <div style={{ fontSize: '20px', marginBottom: '4px' }}>{icon}</div>
+                      <div style={{ fontSize: '26px', fontWeight: 800, color: c }}>{v}</div>
+                      <div style={{ fontSize: '12px', color: 'var(--text-3)' }}>{l}</div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Students Table */}
+                <div className="card">
+                  <div className="card-head">
+                    <div className="card-title">🎓 {contestSubsData.contest?.title} — Student Submissions</div>
+                  </div>
+                  <div style={{ overflowX: 'auto' }}>
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th>#</th>
+                          <th>Student</th>
+                          <th>Enrollment</th>
+                          <th>Submissions</th>
+                          <th>AC</th>
+                          <th>Problems Solved</th>
+                          <th>Proctoring</th>
+                          <th>Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {contestSubsData.students?.map((student, idx) => {
+                          const isExpanded = expandedSubStudentId === student.studentId;
+                          const proc = student.proctoring;
+                          return (
+                            <React.Fragment key={student.studentId}>
+                              <tr>
+                                <td style={{ fontWeight: 700 }}>{idx + 1}</td>
+                                <td>
+                                  <div style={{ fontWeight: 700 }}>{student.name}</div>
+                                  <div style={{ fontSize: '11px', color: 'var(--text-3)' }}>Sem {student.semester || '-'}</div>
+                                </td>
+                                <td style={{ fontFamily: 'var(--mono)', fontSize: '12px' }}>{student.enrollment}</td>
+                                <td style={{ fontWeight: 600 }}>{student.totalSubmissions}</td>
+                                <td>
+                                  <span className="badge badge-teal" style={{ fontWeight: 700 }}>{student.totalAC}</span>
+                                </td>
+                                <td>
+                                  {contestSubsData.contest?.problems?.map(p => {
+                                    const probId = p.id?.toString();
+                                    const bestScore = student.bestScores?.[probId];
+                                    return (
+                                      <span key={probId} style={{
+                                        display: 'inline-block', width: '24px', height: '24px', lineHeight: '24px',
+                                        textAlign: 'center', borderRadius: '4px', fontSize: '10px', fontWeight: 700,
+                                        marginRight: '3px',
+                                        background: bestScore === 100 ? '#2cbb5d20' : bestScore > 0 ? '#f0a50020' : 'var(--bg-3)',
+                                        color: bestScore === 100 ? '#2cbb5d' : bestScore > 0 ? '#f0a500' : 'var(--text-3)',
+                                        border: `1px solid ${bestScore === 100 ? '#2cbb5d40' : bestScore > 0 ? '#f0a50040' : 'var(--border)'}`
+                                      }} title={`${p.title}: ${bestScore || 0}%`}>
+                                        {bestScore === 100 ? '✓' : bestScore > 0 ? '◐' : '✗'}
+                                      </span>
+                                    );
+                                  })}
+                                </td>
+                                <td>
+                                  {proc ? (
+                                    <div style={{ display: 'flex', gap: '4px', alignItems: 'center' }}>
+                                      {proc.disqualified && <span className="badge badge-red" style={{ fontSize: '9px' }}>DQ</span>}
+                                      {proc.totalAlerts > 0 ? (
+                                        <span style={{ fontSize: '11px', color: proc.totalAlerts > 3 ? 'var(--red)' : 'var(--amber)', fontWeight: 600 }}>
+                                          ⚠ {proc.totalAlerts} alerts
+                                        </span>
+                                      ) : (
+                                        <span style={{ fontSize: '11px', color: 'var(--text-3)' }}>Clean</span>
+                                      )}
+                                    </div>
+                                  ) : (
+                                    <span style={{ fontSize: '11px', color: 'var(--text-3)' }}>N/A</span>
+                                  )}
+                                </td>
+                                <td>
+                                  <button
+                                    className="btn btn-ghost btn-sm"
+                                    onClick={() => {
+                                      setExpandedSubStudentId(isExpanded ? null : student.studentId);
+                                      setExpandedSubCode(null);
+                                    }}
+                                  >
+                                    {isExpanded ? 'Hide ▲' : 'View Code 👇'}
+                                  </button>
+                                </td>
+                              </tr>
+
+                              {/* Expanded student submissions detail */}
+                              {isExpanded && (
+                                <tr>
+                                  <td colSpan={8} style={{ background: 'var(--bg-3)', padding: '16px', borderBottom: '2px solid var(--purple)' }}>
+                                    {/* Proctoring Summary */}
+                                    {proc && proc.totalAlerts > 0 && (
+                                      <div style={{ marginBottom: '12px', padding: '10px', borderRadius: '8px', background: 'var(--bg)', border: '1px solid var(--border)' }}>
+                                        <div style={{ fontSize: '12px', fontWeight: 700, marginBottom: '6px' }}>🛡 Proctoring Summary</div>
+                                        <div style={{ display: 'flex', gap: '16px', fontSize: '12px' }}>
+                                          <span>Tab Switches: <strong style={{ color: 'var(--amber)' }}>{proc.tabSwitches}</strong></span>
+                                          <span>Paste Events: <strong style={{ color: 'var(--purple)' }}>{proc.pasteEvents}</strong></span>
+                                          <span>Fullscreen Exits: <strong style={{ color: 'var(--red)' }}>{proc.fullscreenExits}</strong></span>
+                                          {proc.disqualified && <span className="badge badge-red">Disqualified: {proc.disqualifiedReason}</span>}
+                                        </div>
+                                      </div>
+                                    )}
+
+                                    {/* Individual Submissions */}
+                                    <div style={{ fontSize: '12px', fontWeight: 700, marginBottom: '8px' }}>📝 All Submissions ({student.submissions.length})</div>
+                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                      {student.submissions.map((sub, si) => (
+                                        <div key={sub.id || si} style={{ padding: '10px', borderRadius: '8px', background: 'var(--bg)', border: '0.5px solid var(--border)' }}>
+                                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                              <span className={`badge ${sub.verdict === 'AC' ? 'badge-teal' : sub.verdict === 'CE' ? 'badge-gray' : 'badge-red'}`}>
+                                                {sub.verdict}
+                                              </span>
+                                              <span style={{ fontWeight: 700, fontSize: '13px' }}>{sub.problemTitle}</span>
+                                              <span className={`badge ${sub.problemDifficulty === 'easy' ? 'badge-teal' : sub.problemDifficulty === 'hard' ? 'badge-red' : 'badge-purple'}`} style={{ fontSize: '9px' }}>
+                                                {sub.problemDifficulty}
+                                              </span>
+                                            </div>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11px', color: 'var(--text-3)' }}>
+                                              <span>Tests: <strong style={{ color: 'var(--text)' }}>{sub.testsPassed}/{sub.totalTests}</strong></span>
+                                              <span>Score: <strong style={{ color: sub.partialScore === 100 ? '#2cbb5d' : 'var(--amber)' }}>{sub.partialScore}%</strong></span>
+                                              <span>{sub.language}</span>
+                                              <span>{new Date(sub.timestamp).toLocaleString()}</span>
+                                            </div>
+                                          </div>
+                                          
+                                          {/* Code toggle */}
+                                          <div style={{ display: 'flex', gap: '6px' }}>
+                                            <button
+                                              className="btn btn-ghost btn-sm"
+                                              style={{ fontSize: '11px' }}
+                                              onClick={() => setExpandedSubCode(expandedSubCode === sub.id ? null : sub.id)}
+                                            >
+                                              {expandedSubCode === sub.id ? '🔼 Hide Code' : '🔽 View Code'}
+                                            </button>
+                                          </div>
+
+                                          {/* Code block */}
+                                          {expandedSubCode === sub.id && (
+                                            <div style={{ marginTop: '8px' }}>
+                                              <pre style={{
+                                                background: '#1e1e2e', color: '#cdd6f4', padding: '12px',
+                                                borderRadius: '8px', fontSize: '12px', fontFamily: 'var(--mono)',
+                                                overflowX: 'auto', maxHeight: '400px', overflowY: 'auto',
+                                                whiteSpace: 'pre-wrap', wordBreak: 'break-all', lineHeight: 1.5
+                                              }}>
+                                                {sub.code}
+                                              </pre>
+                                              {sub.aiFeedback && (
+                                                <div style={{ marginTop: '6px', padding: '8px', borderRadius: '6px', background: '#f0a50010', border: '1px solid #f0a50030', fontSize: '12px' }}>
+                                                  <strong style={{ color: 'var(--amber)' }}>AI Feedback:</strong> {sub.aiFeedback}
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </td>
+                                </tr>
+                              )}
+                            </React.Fragment>
+                          );
+                        })}
+                        {(!contestSubsData.students || contestSubsData.students.length === 0) && (
+                          <tr>
+                            <td colSpan={8} style={{ textAlign: 'center', color: 'var(--text-3)', padding: '2rem' }}>
+                              No submissions found for this contest.
+                            </td>
+                          </tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </>
+            )}
+
+            {!selectedContestForSubs && !contestSubsLoading && (
+              <div className="card card-body" style={{ textAlign: 'center', padding: '2rem', color: 'var(--text-3)' }}>
+                Select a contest above to view student submissions, code, and test results.
+              </div>
+            )}
+          </div>
+        )}
+
         {/* ─── FACULTY STUDENT TRACKER (CODOLIO TYPE) ─── */}
         {activeSection === 'students' && (
           <div>
@@ -620,8 +871,18 @@ export default function DevDashboard() {
                             <tr>
                               <td style={{ fontWeight: 700, fontSize: '13px' }}>#{student.rank || idx + 1}</td>
                               <td>
-                                <div style={{ fontWeight: 700, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                                  {student.name}
+                                <div style={{ fontWeight: 700, fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                                  <span style={{ color: student.academicStatus === 'flagged' ? '#ef4444' : undefined }}>{student.name}</span>
+                                  {student.academicStatus === 'flagged' && (
+                                    <span style={{ fontSize: '10px', background: 'rgba(239,68,68,0.15)', color: '#ef4444', border: '0.5px solid #ef4444', padding: '1px 5px', borderRadius: '8px', fontWeight: 800 }}>
+                                      🚩 Flagged (Red)
+                                    </span>
+                                  )}
+                                  {student.academicStatus === 'warning' && (
+                                    <span style={{ fontSize: '10px', background: 'rgba(245,158,11,0.15)', color: '#f59e0b', border: '0.5px solid #f59e0b', padding: '1px 5px', borderRadius: '8px', fontWeight: 800 }}>
+                                      ⚠️ Warning
+                                    </span>
+                                  )}
                                   {hasCodolio && (
                                     <span style={{ fontSize: '10px', background: 'rgba(16,185,129,0.15)', color: '#10B981', padding: '1px 5px', borderRadius: '8px', fontWeight: 700 }} title="Codolio Verified">
                                       Codolio ✓

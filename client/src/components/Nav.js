@@ -1,55 +1,236 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import NotificationBell from './NotificationBell';
+import { 
+  LayoutDashboard, 
+  Code2, 
+  PlaySquare, 
+  Trophy, 
+  Keyboard, 
+  User, 
+  ShieldAlert, 
+  LogOut, 
+  ChevronDown, 
+  Flame, 
+  Award,
+  PlusCircle,
+  BarChart3
+} from 'lucide-react';
+
+
+import Logo from './Logo';
+import './Nav.css';
 
 export default function Nav() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
   const loc = useLocation();
   const [open, setOpen] = useState(false);
+  const dropdownRef = useRef(null);
 
-  // Hide nav on landing page when not logged in
+  // Close dropdown on outside click
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+  // Hide nav on landing page when not logged in, or in full-screen contest arena / practice / problem workspaces
   if (!user && loc.pathname === '/') return null;
+  if (loc.pathname.startsWith('/contest/')) return null;
+  if (loc.pathname.startsWith('/problem/')) return null;
+  if (loc.pathname.startsWith('/practice')) return null;
 
-  const handleLogout = () => { logout(); navigate('/'); };
+  const handleLogout = () => {
+    logout();
+    navigate('/');
+  };
+
+  const isFaculty = user?.role === 'faculty';
+
+  // Distinct navigation links for Faculty vs Student
+  const navLinks = isFaculty ? [
+    { label: 'Faculty Console', path: '/dev', icon: <LayoutDashboard size={15} /> },
+    { label: 'Problem Bank', path: '/problems', icon: <Code2 size={15} /> },
+    { label: 'Plagiarism AI', path: '/dev/plagiarism', icon: <ShieldAlert size={15} /> },
+    { label: 'Leaderboard', path: '/leaderboard', icon: <Trophy size={15} /> },
+  ] : [
+    { label: 'Dashboard', path: '/dashboard', icon: <LayoutDashboard size={15} /> },
+    { label: 'Problems', path: '/problems', icon: <Code2 size={15} /> },
+    { label: 'Practice', path: '/practice', icon: <PlaySquare size={15} /> },
+    { label: 'Typing', path: '/typing', icon: <Keyboard size={15} /> },
+    { label: 'Leaderboard', path: '/leaderboard', icon: <Trophy size={15} /> },
+  ];
 
   return (
-    <nav style={styles.nav}>
-      <Link to={user ? '/dashboard' : '/'} style={styles.logo}>
-        <div style={styles.logoIcon}>⌨</div>
-        <span style={styles.logoBrand}>hack<span style={{color:'#7F77DD'}}>with</span>bug</span>
+    <nav className="main-nav">
+      <Link to={user ? (isFaculty ? '/dev' : '/dashboard') : '/'} className="nav-brand" style={{ textDecoration: 'none' }}>
+        <Logo size={28} withText={true} />
       </Link>
+
 
       {user && (
         <>
-          <div style={styles.links}>
-            {[['Dashboard','/dashboard'],['Problems','/problems'],
-              ...(user.role==='student'?[['Practice','/practice']]:[]),
-              ['Leaderboard','/leaderboard'],
-              ...(user.role==='faculty'?[['Dev Console','/dev']]:[])]
-              .map(([label,path]) => (
-              <Link key={path} to={path} style={{...styles.link, ...(loc.pathname.startsWith(path)?styles.linkActive:{})}}>
-                {label}
-              </Link>
-            ))}
+          <div className="nav-links">
+            {navLinks.map(({ label, path, icon }) => {
+              const isActive = loc.pathname === path || (path !== '/dashboard' && path !== '/dev' && loc.pathname.startsWith(path));
+              return (
+                <Link key={path} to={path} className={`nav-item ${isActive ? 'active' : ''}`}>
+                  {icon}
+                  <span>{label}</span>
+                </Link>
+              );
+            })}
           </div>
-          <div style={styles.right}>
+
+          <div className="nav-right">
+            {/* Student-only Streak Counter & Rating Pill */}
+            {!isFaculty && (
+              <>
+                {user.streak > 0 && (
+                  <div className="nav-streak-pill" title={`${user.streak}-day streak! Keep solving.`} onClick={() => navigate(`/profile/${user.enrollment}`)}>
+                    <Flame size={14} color="#f97316" />
+                    <span>{user.streak}d</span>
+                  </div>
+                )}
+
+                <div className="nav-rating-pill" title="Competitive Programming Rating">
+                  <span>⭐</span>
+                  <span>{user.rating || 1200}</span>
+                </div>
+              </>
+            )}
+
+            {/* Academic Honor Code Flag / Warning Indicator */}
+            {user.academicStatus === 'flagged' && (
+              <span
+                className="badge"
+                style={{
+                  padding: '4px 10px',
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  background: 'rgba(239, 68, 68, 0.15)',
+                  color: '#ef4444',
+                  border: '1px solid #ef4444',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+                title={user.flaggedReason || 'Account Flagged for Academic Honor Code Violation'}
+              >
+                🚩 Account Flagged (Red)
+              </span>
+            )}
+            {user.academicStatus === 'warning' && (
+              <span
+                className="badge"
+                style={{
+                  padding: '4px 10px',
+                  fontSize: '11px',
+                  fontWeight: 800,
+                  background: 'rgba(245, 158, 11, 0.15)',
+                  color: '#f59e0b',
+                  border: '1px solid #f59e0b',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '4px'
+                }}
+                title={user.flaggedReason || 'Academic Warning Active'}
+              >
+                ⚠️ Academic Warning
+              </span>
+            )}
+
+            {/* Faculty Badge */}
+            {isFaculty && (
+              <span className="badge badge-purple" style={{ padding: '4px 10px', fontSize: '11px', fontWeight: 700 }}>
+                🎓 Faculty Portal
+              </span>
+            )}
+
             <NotificationBell />
-            <Link to={`/profile/${user.enrollment}`}>
-              <div style={styles.avatar}>{user.avatar}</div>
-            </Link>
-            <div style={{position:'relative'}}>
-              <button style={styles.nameBtn} onClick={()=>setOpen(o=>!o)}>
-                {user.name.split(' ')[0]} ▾
+
+            {/* User Dropdown */}
+            <div className="nav-user-menu" ref={dropdownRef}>
+              <button
+                className="nav-user-toggle"
+                onClick={() => setOpen(o => !o)}
+                style={{
+                  border: user.academicStatus === 'flagged' ? '1px solid #ef4444' : user.academicStatus === 'warning' ? '1px solid #f59e0b' : undefined,
+                  background: user.academicStatus === 'flagged' ? 'rgba(239, 68, 68, 0.08)' : undefined
+                }}
+              >
+                <div
+                  className="nav-avatar-btn"
+                  style={{
+                    boxShadow: user.academicStatus === 'flagged' ? '0 0 8px rgba(239, 68, 68, 0.5)' : undefined,
+                    border: user.academicStatus === 'flagged' ? '2px solid #ef4444' : undefined
+                  }}
+                >
+                  {user.avatar || (user.name ? user.name[0] : 'U')}
+                </div>
+                <span className="nav-user-name" style={{ color: user.academicStatus === 'flagged' ? '#ef4444' : undefined }}>
+                  {user.name?.split(' ')[0]}
+                </span>
+                <ChevronDown size={13} style={{ color: 'var(--text-3)' }} />
               </button>
+
               {open && (
-                <div style={styles.dropdown} onMouseLeave={()=>setOpen(false)}>
-                  <Link to={`/profile/${user.enrollment}`} style={styles.dropItem} onClick={()=>setOpen(false)}>👤 My Profile</Link>
-                  {user.role==='faculty' && <Link to="/dev" style={styles.dropItem} onClick={()=>setOpen(false)}>📊 Dev Console</Link>}
-                  <Link to="/dev/plagiarism" style={styles.dropItem} onClick={()=>setOpen(false)}>🛡 Plagiarism</Link>
-                  <hr style={{border:'none',borderTop:'0.5px solid #eee',margin:'4px 0'}}/>
-                  <button style={{...styles.dropItem,border:'none',background:'none',cursor:'pointer',color:'#E24B4A',width:'100%',textAlign:'left'}} onClick={handleLogout}>Sign out</button>
+                <div className="nav-dropdown">
+                  <div className="nav-drop-user-header">
+                    <div className="nav-drop-name" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                      <span>{user.name}</span>
+                      {user.academicStatus === 'flagged' && (
+                        <span style={{ fontSize: '10px', color: '#ef4444', fontWeight: 800 }}>🚩 FLAGGED</span>
+                      )}
+                    </div>
+                    <div className="nav-drop-sub">
+                      {user.enrollment} · {isFaculty ? 'Professor / Faculty' : `Sem ${user.semester || 5}`}
+                    </div>
+                  </div>
+
+                  {isFaculty ? (
+                    <>
+                      <Link to="/dev" className="nav-drop-item" onClick={() => setOpen(false)}>
+                        <BarChart3 size={14} />
+                        <span>Faculty Console</span>
+                      </Link>
+
+                      <Link to="/dev/problem/new" className="nav-drop-item" onClick={() => setOpen(false)}>
+                        <PlusCircle size={14} />
+                        <span>Create Problem</span>
+                      </Link>
+
+                      <Link to="/dev/contest/new" className="nav-drop-item" onClick={() => setOpen(false)}>
+                        <Award size={14} />
+                        <span>Schedule Contest</span>
+                      </Link>
+
+                      <Link to="/dev/plagiarism" className="nav-drop-item" onClick={() => setOpen(false)}>
+                        <ShieldAlert size={14} />
+                        <span>Plagiarism Reports</span>
+                      </Link>
+                    </>
+                  ) : (
+                    <>
+                      <Link to={`/profile/${user.enrollment}`} className="nav-drop-item" onClick={() => setOpen(false)}>
+                        <User size={14} />
+                        <span>My Profile & Codolio</span>
+                      </Link>
+                    </>
+                  )}
+
+                  <hr className="nav-divider" />
+
+                  <button className="nav-drop-item danger" style={{ border: 'none', background: 'none', width: '100%', cursor: 'pointer', textAlign: 'left' }} onClick={handleLogout}>
+                    <LogOut size={14} />
+                    <span>Sign Out</span>
+                  </button>
                 </div>
               )}
             </div>
@@ -58,28 +239,13 @@ export default function Nav() {
       )}
 
       {!user && (
-        <div style={styles.right}>
-          <Link to="/login"><button style={styles.btnGhost}>Log in</button></Link>
-          <Link to="/login"><button style={styles.btnPrimary}>Get started</button></Link>
+        <div className="nav-right">
+          <Link to="/login"><button className="btn btn-ghost btn-sm">Log in</button></Link>
+          <Link to="/login"><button className="btn btn-primary btn-sm">Get started</button></Link>
         </div>
       )}
     </nav>
   );
 }
 
-const styles = {
-  nav:{display:'flex',alignItems:'center',padding:'0 1.5rem',height:'56px',background:'#ffffff',borderBottom:'0.5px solid rgba(0,0,0,.1)',position:'sticky',top:0,zIndex:50,gap:'12px'},
-  logo:{display:'flex',alignItems:'center',gap:'8px',textDecoration:'none'},
-  logoIcon:{width:32,height:32,background:'#7F77DD',borderRadius:'8px',display:'flex',alignItems:'center',justifyContent:'center',color:'#fff',fontSize:'15px',flexShrink:0},
-  logoBrand:{fontSize:'15px',fontWeight:700,color:'#1a1a18'},
-  links:{display:'flex',gap:'2px',marginLeft:'12px'},
-  link:{fontSize:'13px',color:'#5F5E5A',padding:'5px 12px',borderRadius:'6px',textDecoration:'none'},
-  linkActive:{background:'#F8F8F6',color:'#1a1a18'},
-  right:{marginLeft:'auto',display:'flex',alignItems:'center',gap:'8px'},
-  avatar:{width:30,height:30,borderRadius:'50%',background:'#EEEDFE',color:'#534AB7',display:'flex',alignItems:'center',justifyContent:'center',fontSize:'11px',fontWeight:700,cursor:'pointer'},
-  nameBtn:{border:'none',background:'transparent',fontSize:'13px',color:'#5F5E5A',cursor:'pointer',padding:'4px 8px',borderRadius:'6px'},
-  dropdown:{position:'absolute',right:0,top:'calc(100% + 4px)',background:'#fff',border:'0.5px solid rgba(0,0,0,.1)',borderRadius:'12px',padding:'6px',minWidth:'180px',boxShadow:'0 8px 24px rgba(0,0,0,.12)',zIndex:100,display:'flex',flexDirection:'column',gap:'2px'},
-  dropItem:{display:'block',padding:'8px 10px',fontSize:'13px',color:'#5F5E5A',borderRadius:'6px',textDecoration:'none'},
-  btnGhost:{fontSize:'12px',padding:'6px 14px',borderRadius:'6px',border:'0.5px solid rgba(0,0,0,.18)',background:'transparent',color:'#1a1a18',cursor:'pointer'},
-  btnPrimary:{fontSize:'12px',padding:'6px 14px',borderRadius:'6px',border:'none',background:'#7F77DD',color:'#fff',cursor:'pointer',fontWeight:500},
-};
+

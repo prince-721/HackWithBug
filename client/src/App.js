@@ -37,9 +37,12 @@ function AppRoutes() {
         <Route path="/dashboard" element={<PrivateRoute><Dashboard /></PrivateRoute>} />
         <Route path="/profile/:enrollment" element={<PrivateRoute><Profile /></PrivateRoute>} />
         <Route path="/problems" element={<PrivateRoute><Problems /></PrivateRoute>} />
-        <Route path="/contest/:id" element={<PrivateRoute><ContestArena /></PrivateRoute>} />
-        <Route path="/leaderboard" element={<PrivateRoute><Leaderboard /></PrivateRoute>} />
+        <Route path="/problem/:id" element={<PrivateRoute><Practice /></PrivateRoute>} />
         <Route path="/practice" element={<PrivateRoute><Practice /></PrivateRoute>} />
+        <Route path="/practice/:id" element={<PrivateRoute><Practice /></PrivateRoute>} />
+        <Route path="/contest/:id" element={<PrivateRoute><ContestArena /></PrivateRoute>} />
+
+        <Route path="/leaderboard" element={<PrivateRoute><Leaderboard /></PrivateRoute>} />
         <Route path="/typing" element={<PrivateRoute><TypingSpeedTest /></PrivateRoute>} />
         <Route path="/dev" element={<PrivateRoute role="faculty"><DevDashboard /></PrivateRoute>} />
         <Route path="/dev/contest/:id?" element={<PrivateRoute role="faculty"><ContestWizard /></PrivateRoute>} />
@@ -57,7 +60,7 @@ export default function App() {
       <BrowserRouter>
         <AppRoutes />
         <Toaster position="top-right" toastOptions={{
-          style:{ background:'#fff', color:'#1a1a18', border:'0.5px solid rgba(0,0,0,.1)', fontSize:'13px' }
+          style:{ background:'#111827', color:'#f3f4f6', border:'1px solid rgba(255,255,255,0.08)', fontSize:'13px', boxShadow:'0 8px 24px rgba(0,0,0,0.4)' }
         }} />
       </BrowserRouter>
     </AuthProvider>

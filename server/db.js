@@ -5,8 +5,23 @@ mongoose.set('toJSON', {
   virtuals: true,
   versionKey: false,
   transform: (doc, ret) => {
-    ret.id = ret._id.toString();
-    delete ret._id;
+    if (ret && ret._id) {
+      ret.id = ret._id.toString();
+      delete ret._id;
+    }
+    return ret;
+  }
+});
+
+mongoose.set('toObject', {
+  virtuals: true,
+  versionKey: false,
+  transform: (doc, ret) => {
+    if (ret && ret._id) {
+      ret.id = ret._id.toString();
+      delete ret._id;
+    }
+    return ret;
   }
 });
 
@@ -41,10 +56,22 @@ const userSchema = new mongoose.Schema({
   achievements: [{ type: String }],
   dailyStreak: { type: Number, default: 0 },
   lastSolvedDate: { type: Date },
+  // Academic Integrity / Plagiarism Flagging
+  academicStatus: { type: String, enum: ['good', 'warning', 'flagged'], default: 'good' },
+  academicWarningCount: { type: Number, default: 0 },
+  flaggedReason: { type: String, default: '' },
+  lastAcademicActionAt: { type: Date },
   // LeetCode sync tracking
   leetcodeSolved: [{ type: String }],
   leetcodeSyncedAt: { type: Date }
 });
+
+const testCaseSchema = new mongoose.Schema({
+  type: { type: String, default: 'sample', enum: ['sample', 'hidden'] },
+  input: { type: String, default: '' },
+  output: { type: String, default: '' },
+  weight: { type: Number, default: 1 }
+}, { _id: false });
 
 // ─── PROBLEM ─────────────────────────────────────────────────────────────────
 const problemSchema = new mongoose.Schema({
@@ -60,6 +87,7 @@ const problemSchema = new mongoose.Schema({
   constraints: { type: String },
   sampleInput: { type: String },
   sampleOutput: { type: String },
+  testCases: [testCaseSchema],
   hiddenTestCases: [{ input: String, output: String, weight: { type: Number, default: 1 } }],
   boundaryCases: [{ input: String, output: String }],
   stressCases: [{ input: String, output: String }],
@@ -162,16 +190,26 @@ const plagiarismPairSchema = new mongoose.Schema({
   problemId: { type: mongoose.Schema.Types.ObjectId, ref: 'Problem', required: true },
   userId1: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
   userId2: { type: mongoose.Schema.Types.ObjectId, ref: 'User', required: true },
+  submissionId1: { type: mongoose.Schema.Types.ObjectId, ref: 'Submission' },
+  submissionId2: { type: mongoose.Schema.Types.ObjectId, ref: 'Submission' },
+  code1: { type: String, default: '' },
+  code2: { type: String, default: '' },
+  lang1: { type: String, default: 'cpp17' },
+  lang2: { type: String, default: 'cpp17' },
   tokenScore: { type: Number, required: true },
   astScore: { type: Number, required: true },
   semanticScore: { type: Number, required: true },
   combinedScore: { type: Number, required: true },
   verdict: { type: String, default: 'pending' },
   aiAnalysis: { type: String },
+  matchedPatterns: { type: [String], default: [] },
   matchedLines: { type: [String], default: [] },
+  recommendation: { type: String, default: 'Warn' },
   createdAt: { type: Date, default: Date.now },
   facultyNote: { type: String }
 });
+plagiarismPairSchema.index({ contestId: 1, problemId: 1 });
+plagiarismPairSchema.index({ userId1: 1, userId2: 1 });
 
 // ─── PROCTORING LOG ───────────────────────────────────────────────────────────
 const proctoringLogSchema = new mongoose.Schema({
@@ -187,9 +225,13 @@ const proctoringLogSchema = new mongoose.Schema({
   tabSwitches: { type: Number, default: 0 },
   pasteEvents: { type: Number, default: 0 },
   fullscreenExits: { type: Number, default: 0 },
-  voiceEvents: { type: Number, default: 0 }
+  voiceEvents: { type: Number, default: 0 },
+  disqualified: { type: Boolean, default: false },
+  disqualifiedReason: { type: String, default: '' },
+  disqualifiedAt: { type: Date }
 });
 proctoringLogSchema.index({ userId: 1, contestId: 1 }, { unique: true });
+
 
 // ─── NOTIFICATION ─────────────────────────────────────────────────────────────
 const notificationSchema = new mongoose.Schema({
@@ -330,11 +372,6 @@ const initializeDatabase = async () => {
         { userId: uIds.riya, problemId: pIds[0], contestId: cIds[0], verdict: 'AC', language: 'cpp17', time: 10, memory: 4, code: '// riya solution', timestamp: new Date(Date.now() - 1 * 60 * 60 * 1000), partialScore: 100 }
       ]);
 
-      await PlagiarismPair.insertMany([
-        { contestId: cIds[0], problemId: pIds[1], userId1: uIds.riya, userId2: uIds.karan, tokenScore: 91, astScore: 88, semanticScore: 94, combinedScore: 91, verdict: 'pending', aiAnalysis: 'Both solutions use identical three-pointer approach with same variable names. 47 matching lines suggest copying.', matchedLines: ['upper_bound(board.begin(),board.end(),s,greater<int>())-board.begin()'], createdAt: new Date() },
-        { contestId: cIds[0], problemId: pIds[3], userId1: uIds.sanya, userId2: uIds.arjun, tokenScore: 82, astScore: 79, semanticScore: 85, combinedScore: 82, verdict: 'pending', aiAnalysis: 'Segment tree functions share identical recursive structure.', matchedLines: ['void build(int node, int l, int r)', 'tree[node] = tree[2*node] ^ tree[2*node+1]'], createdAt: new Date() },
-        { contestId: cIds[0], problemId: pIds[4], userId1: uIds.yash, userId2: uIds.karan, tokenScore: 58, astScore: 52, semanticScore: 38, combinedScore: 50, verdict: 'pending', aiAnalysis: 'Moderate token similarity driven by standard BFS boilerplate. Low concern.', matchedLines: ['while(!q.empty())'], createdAt: new Date() }
-      ]);
 
       // Seed notifications
       await Notification.insertMany([

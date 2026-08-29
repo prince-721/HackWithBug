@@ -189,7 +189,7 @@ export default function ContestWizard() {
   const handleAIGenerate = async () => {
     setGenerating(true);
     setValidationResult(null);
-    toast.loading('LLaMA generating complete problem payload…', { id: 'aigen' });
+    toast.loading('✨ AI generating complete problem & test cases…', { id: 'aigen' });
     try {
       const r = await api.post('/ai/generate-problem', aiOptions);
       const data = r.data;
@@ -214,16 +214,17 @@ export default function ContestWizard() {
         sampleInput: data.sampleInput || '',
         sampleOutput: data.sampleOutput || '',
       });
-      setTestCases(data.hiddenTestCases || []);
+      setTestCases(data.hiddenTestCases || (data.testCases?.filter(t => t.type === 'hidden') || []));
       setBoundaryCases(data.boundaryCases || []);
       setStressCases(data.stressCases || []);
-      toast.success('Problem details generated and loaded!', { id: 'aigen' });
-    } catch {
-      toast.error('AI problem generation failed.', { id: 'aigen' });
+      toast.success('🎉 Problem details generated and loaded!', { id: 'aigen' });
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'AI problem generation failed.', { id: 'aigen' });
     } finally {
       setGenerating(false);
     }
   };
+
 
   // AI Verification Check
   const handleVerifyProblem = async () => {

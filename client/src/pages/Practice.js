@@ -1,243 +1,228 @@
 import React, { useState, useRef, useEffect, useCallback } from 'react';
+import { useParams, useSearchParams, useNavigate } from 'react-router-dom';
 import api from '../utils/api';
 import { useAuth } from '../context/AuthContext';
 import toast from 'react-hot-toast';
 import Editor from '@monaco-editor/react';
-import useLeetCodeSync from '../hooks/useLeetCodeSync';
+
 import {
   Menu,
   ChevronLeft,
   ChevronRight,
   Shuffle,
   RotateCw,
-  Star,
-  Share2,
-  HelpCircle,
+  Copy,
   Maximize2,
   Minimize2,
-  Lock,
-  ChevronUp,
-  ChevronDown,
-  Settings,
-  ExternalLink,
-  RefreshCw
+  Terminal,
+  Play,
+  Upload,
+  Sparkles,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Clock,
+  Layers,
+  HelpCircle,
+  BookOpen,
+  History,
+  RefreshCw,
+  Send,
+  Zap,
+  ArrowLeft
 } from 'lucide-react';
 import './Practice.css';
 
-// Mapped language configurations
+import { saveCodeDraft, loadCodeDraft, formatTimeAgo } from '../utils/codeStorage';
+
+// Language Mappers
 const LANG_LABELS = {
-  'java17': 'Java',
-  'cpp17': 'C++',
-  'python3': 'Python3',
-  'c': 'C'
+  'cpp17': 'C++17',
+  'java17': 'Java 17',
+  'python3': 'Python 3',
+  'c': 'C',
+  'javascript': 'JavaScript'
 };
 
 const MONACO_LANGS = {
-  'java17': 'java',
   'cpp17': 'cpp',
+  'java17': 'java',
   'python3': 'python',
-  'c': 'c'
+  'c': 'c',
+  'javascript': 'javascript'
 };
 
 const STARTER_CODES = {
-  'java17': `class Solution {\n    public void solve() {\n        \n    }\n}`,
-  'cpp17': `class Solution {\npublic:\n    void solve() {\n        \n    }\n};`,
-  'python3': `class Solution:\n    def solve(self) -> None:\n        pass`,
-  'c': `void solve() {\n\n}`
+  'cpp17': `#include <iostream>\n#include <vector>\n#include <string>\n#include <algorithm>\nusing namespace std;\n\nint main() {\n    ios_base::sync_with_stdio(false);\n    cin.tie(NULL);\n    \n    // Write your solution here\n    \n    return 0;\n}`,
+  'java17': `import java.util.*;\nimport java.io.*;\n\npublic class Main {\n    public static void main(String[] args) {\n        Scanner sc = new Scanner(System.in);\n        // Write your solution here\n        \n    }\n}`,
+  'python3': `import sys\n\ndef solve():\n    input = sys.stdin.read\n    # Write your solution here\n    pass\n\nif __name__ == '__main__':\n    solve()`,
+  'c': `#include <stdio.h>\n#include <stdlib.h>\n#include <string.h>\n\nint main() {\n    // Write your solution here\n    \n    return 0;\n}`,
+  'javascript': `const fs = require('fs');\n\nfunction solve() {\n    const input = fs.readFileSync('/dev/stdin', 'utf-8');\n    // Write your solution here\n}\n\nsolve();`
 };
 
-// Starter code helper generator
-const getStarterCode = (problem, language) => {
-  if (!problem) return '';
-  const title = problem.title || '';
-
-  const templates = {
-    'Reverse the Array': {
-      'java17': `class Solution {\n    public void reverseArray(int[] arr) {\n        \n    }\n}`,
-      'cpp17': `class Solution {\npublic:\n    void reverseArray(vector<int>& arr) {\n        \n    }\n};`,
-      'python3': `class Solution:\n    def reverseArray(self, arr: List[int]) -> None:\n        pass`,
-      'c': `void reverseArray(int* arr, int arrSize) {\n\n}`
-    },
-    'Climb the Leaderboard': {
-      'java17': `class Solution {\n    public int[] climbingLeaderboard(int[] ranked, int[] player) {\n        \n    }\n}`,
-      'cpp17': `class Solution {\npublic:\n    vector<int> climbingLeaderboard(vector<int>& ranked, vector<int>& player) {\n        \n    }\n};`,
-      'python3': `class Solution:\n    def climbingLeaderboard(self, ranked: List[int], player: List[int]) -> List[int]:\n        pass`,
-      'c': `int* climbingLeaderboard(int* ranked, int rankedSize, int* player, int playerSize, int* resultCount) {\n\n}`
-    },
-    'Graph Coloring': {
-      'java17': `class Solution {\n    public boolean isBipartite(int[][] graph) {\n        \n    }\n}`,
-      'cpp17': `class Solution {\npublic:\n    bool isBipartite(vector<vector<int>>& graph) {\n        \n    }\n};`,
-      'python3': `class Solution:\n    def isBipartite(self, graph: List[List[int]]) -> bool:\n        pass`,
-      'c': `bool isBipartite(int** graph, int graphSize, int* graphColSize) {\n\n}`
-    },
-    'Segment Tree XOR': {
-      'java17': `class Solution {\n    public int[] xorQueries(int[] arr, int[][] queries) {\n        \n    }\n}`,
-      'cpp17': `class Solution {\npublic:\n    vector<int> xorQueries(vector<int>& arr, vector<vector<int>>& queries) {\n        \n    }\n};`,
-      'python3': `class Solution:\n    def xorQueries(self, arr: List[int], queries: List[List[int]]) -> List[int]:\n        pass`,
-      'c': `int* xorQueries(int* arr, int arrSize, int** queries, int queriesSize, int* queriesColSize, int* resultCount) {\n\n}`
-    },
-    'Network Flow': {
-      'java17': `class Solution {\n    public int maxFlow(int n, int[][] edges, int source, int sink) {\n        \n    }\n}`,
-      'cpp17': `class Solution {\npublic:\n    int maxFlow(int n, vector<vector<int>>& edges, int source, int sink) {\n        \n    }\n};`,
-      'python3': `class Solution:\n    def maxFlow(self, n: int, edges: List[List[int]], source: int, sink: int) -> int:\n        pass`,
-      'c': `int maxFlow(int n, int** edges, int edgesSize, int* edgesColSize, int source, int sink) {\n\n}`
-    },
-    'DP on Trees': {
-      'java17': `class Solution {\n    public int maxIndependentSet(int n, int[][] edges, int[] weights) {\n        \n    }\n}`,
-      'cpp17': `class Solution {\npublic:\n    int maxIndependentSet(int n, vector<vector<int>>& edges, vector<int>& weights) {\n        \n    }\n};`,
-      'python3': `class Solution:\n    def maxIndependentSet(self, n: int, edges: List[List[int]], weights: List[int]) -> int:\n        pass`,
-      'c': `int maxIndependentSet(int n, int** edges, int edgesSize, int* edgesColSize, int* weights, int weightsSize) {\n\n}`
-    },
-    'Two Sum': {
-      'java17': `class Solution {\n    public int[] twoSum(int[] nums, int target) {\n        \n    }\n}`,
-      'cpp17': `class Solution {\npublic:\n    vector<int> twoSum(vector<int>& nums, int target) {\n        \n    }\n};`,
-      'python3': `class Solution:\n    def twoSum(self, nums: List[int], target: int) -> List[int]:\n        pass`,
-      'c': `int* twoSum(int* nums, int numsSize, int target, int* returnSize) {\n\n}`
-    },
-    'Longest Common Subsequence': {
-      'java17': `class Solution {\n    public int longestCommonSubsequence(String text1, String text2) {\n        \n    }\n}`,
-      'cpp17': `class Solution {\npublic:\n    int longestCommonSubsequence(string text1, string text2) {\n        \n    }\n};`,
-      'python3': `class Solution:\n    def longestCommonSubsequence(self, text1: str, text2: str) -> int:\n        pass`,
-      'c': `int longestCommonSubsequence(char* text1, char* text2) {\n\n}`
-    }
-  };
-
-  const key = Object.keys(templates).find(k => title.toLowerCase().includes(k.toLowerCase()));
-  if (key && templates[key][language]) {
-    return templates[key][language];
-  }
-
-  const funcName = title.split(' ').map((word, idx) => {
-    const clean = word.replace(/[^a-zA-Z0-9]/g, '');
-    if (idx === 0) return clean.toLowerCase();
-    return clean.charAt(0).toUpperCase() + clean.slice(1).toLowerCase();
-  }).join('');
-
-  return STARTER_CODES[language].replace('solve', funcName || 'solve');
+const VERDICT_STYLES = {
+  'AC': { label: 'Accepted', color: '#10b981', bg: 'rgba(16, 185, 129, 0.1)', icon: CheckCircle2 },
+  'WA': { label: 'Wrong Answer', color: '#ef4444', bg: 'rgba(239, 68, 68, 0.1)', icon: XCircle },
+  'TLE': { label: 'Time Limit Exceeded', color: '#f59e0b', bg: 'rgba(245, 158, 11, 0.1)', icon: Clock },
+  'CE': { label: 'Compilation Error', color: '#f43f5e', bg: 'rgba(244, 63, 94, 0.1)', icon: AlertTriangle },
+  'RE': { label: 'Runtime Error', color: '#a855f7', bg: 'rgba(168, 85, 247, 0.1)', icon: Zap }
 };
-
-const DIFFICULTIES = ['All', 'easy', 'medium', 'hard'];
-const ALL_TAGS = ['Arrays', 'Binary Search', 'Graphs', 'BFS', 'DP', 'Trees', 'Strings', 'Hashing', 'Segment Tree', 'Data Structures', 'Max Flow', 'Implementation'];
 
 export default function Practice() {
   const { user } = useAuth();
+  const { id, problemId: routeParamId } = useParams();
+  const [searchParams] = useSearchParams();
+  const navigate = useNavigate();
 
-  // LeetCode sync
-  // eslint-disable-next-line no-unused-vars
-  const { solvedSlugs, syncing: lcSyncing, sync: lcSync, isSolved: isLcSolved } = useLeetCodeSync(user?.id, 0);
+  const activeIdFromUrl = id || routeParamId || searchParams.get('problem');
 
-  // Problems data states
+  // Data states
   const [problems, setProblems] = useState([]);
-  const [filtered, setFiltered] = useState([]);
+  const [filteredProblems, setFilteredProblems] = useState([]);
   const [selectedProb, setSelectedProb] = useState(null);
   const [mySubmissions, setMySubmissions] = useState([]);
-  const [dailyChallenge, setDailyChallenge] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  // Filters
-  const [filters, setFilters] = useState({ diff: 'All', tag: '', search: '' });
+  // Drawer & Filter states
+  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+  const [drawerSearch, setDrawerSearch] = useState('');
+  const [drawerDiff, setDrawerDiff] = useState('All');
 
-  // Layout splits
-  const [splitWidth, setSplitWidth] = useState(45);
+  // Layout states
+  const [splitWidth, setSplitWidth] = useState(44);
   const [isDragging, setIsDragging] = useState(false);
   const [isLeftFullscreen, setIsLeftFullscreen] = useState(false);
-  const [isDrawerOpen, setIsDrawerOpen] = useState(false);
 
-  // Tabs states
-  const [activeLeftTab, setActiveLeftTab] = useState('description'); // description, hint, editorial, submissions
-  const [bookmarked, setBookmarked] = useState(false);
-  const [expandedSubId, setExpandedSubId] = useState(null);
+  // Left Panel tabs: 'description' | 'editorial' | 'submissions' | 'ai'
+  const [activeLeftTab, setActiveLeftTab] = useState('description');
 
   // Editor states
   const [selectedLang, setSelectedLang] = useState('cpp17');
   const [code, setCode] = useState('');
+  const [fontSize, setFontSize] = useState(14);
   const [cursorPos, setCursorPos] = useState({ line: 1, ch: 1 });
   const [saveStatus, setSaveStatus] = useState('Saved');
+  const [draftTimestamp, setDraftTimestamp] = useState(null);
+  const [isHistoryModalOpen, setIsHistoryModalOpen] = useState(false);
   const editorRef = useRef(null);
 
-  // AI loads
-  const [hintText, setHintText] = useState('');
-  const [editorialText, setEditorialText] = useState('');
-  const [loadingHint, setLoadingHint] = useState(false);
-  const [loadingEditorial, setLoadingEditorial] = useState(false);
-
-  // Console panel states
-  const [consoleHeight, setConsoleHeight] = useState(40);
-  const [activeConsoleTab, setActiveConsoleTab] = useState('testcase');
+  // Console Panel states
+  const [consoleHeight, setConsoleHeight] = useState(42); // 42 = collapsed pill, >100 = open
+  const [isConsoleOpen, setIsConsoleOpen] = useState(false);
+  const [activeConsoleTab, setActiveConsoleTab] = useState('testcase'); // 'testcase' | 'result'
+  const [activeCaseIdx, setActiveCaseIdx] = useState(0);
   const [customInput, setCustomInput] = useState('');
-  const [runResult, setRunResult] = useState(null); // null, 'running', { status, outputs: [] }
+  const [running, setRunning] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+  const [runResult, setRunResult] = useState(null);
   const [confetti, setConfetti] = useState([]);
 
-  // Timer states
-  const [timeLeft, setTimeLeft] = useState(0); // seconds spent practicing
-  const isTimerPaused = false;
+  // AI Assistant states
+  const [aiChatMsgs, setAiChatMsgs] = useState([
+    { role: 'assistant', text: 'Hello! I am your AI coding mentor. Ask me for hints, concept explanations, or time complexity advice.' }
+  ]);
+  const [aiInput, setAiInput] = useState('');
+  const [aiThinking, setAiThinking] = useState(false);
 
-  // Typing analytics refs
-  const startTimeRef = useRef(Date.now());
-  const keystrokesRef = useRef(0);
-  const pasteCountRef = useRef(0);
-  const backspaceCountRef = useRef(0);
-  const deleteCountRef = useRef(0);
-  const lastTypeTimeRef = useRef(Date.now());
-  const idleTimeRef = useRef(0);
+  // Submissions modal / preview
+  const [selectedSubForView, setSelectedSubForView] = useState(null);
 
-  // Fetch initial problem sets
-  const loadData = useCallback(() => {
-    api.get('/problems').then((r) => {
-      setProblems(r.data);
-      setFiltered(r.data);
-    }).catch(() => {});
 
-    api.get('/submissions?userId=' + user.id).then((r) => {
-      setMySubmissions(r.data);
-    }).catch(() => {});
+  // Helper to load code for a problem (checks 7-day draft, then AC submission, then starter)
+  const loadProblemCode = useCallback((prob, lang, subsList = mySubmissions) => {
+    if (!prob) return;
+    const probId = prob.id || prob._id;
+    // 1. Check local draft (valid for 7 days)
+    const draft = loadCodeDraft(user?.id, probId, lang);
+    if (draft && draft.code && draft.code.trim()) {
+      setCode(draft.code);
+      setDraftTimestamp(draft.updatedAt);
+      setSaveStatus(`Draft Restored (${formatTimeAgo(draft.updatedAt)})`);
+      return;
+    }
+    // 2. Check if user had a previous submission
+    const pastSub = subsList.find(s =>
+      (s.problemId === probId || s.problemId?._id === probId || s.problemId?.id === probId) &&
+      s.language === lang
+    );
+    if (pastSub && pastSub.code) {
+      setCode(pastSub.code);
+      setDraftTimestamp(new Date(pastSub.timestamp).getTime());
+      setSaveStatus(`Loaded Past Sub (${pastSub.verdict})`);
+      return;
+    }
+    // 3. Fallback to starter template
+    setCode(STARTER_CODES[lang] || '');
+    setDraftTimestamp(null);
+    setSaveStatus('Saved');
+  }, [user?.id, mySubmissions]);
 
-    api.get('/contests/daily/challenge').then((r) => {
-      setDailyChallenge(r.data);
-    }).catch(() => {});
-  }, [user.id]);
-
+  // Load problem sets and submissions
   useEffect(() => {
-    loadData();
-  }, [loadData]);
+    setLoading(true);
+    Promise.all([
+      api.get('/problems'),
+      user?.id ? api.get(`/submissions?userId=${user.id}`) : Promise.resolve({ data: [] })
+    ]).then(([pRes, sRes]) => {
+      const allProbs = pRes.data || [];
+      const subs = sRes.data || [];
+      setProblems(allProbs);
+      setFilteredProblems(allProbs);
+      setMySubmissions(subs);
 
-  // Handle problem filtering
+      // Select target problem
+      if (allProbs.length > 0) {
+        let initial = null;
+        if (activeIdFromUrl) {
+          initial = allProbs.find(p => p.id === activeIdFromUrl || p._id === activeIdFromUrl);
+        }
+        if (!initial) {
+          initial = allProbs[0];
+        }
+        setSelectedProb(initial);
+        loadProblemCode(initial, selectedLang, subs);
+      }
+    }).catch(err => {
+      console.error('Error fetching problems:', err);
+      toast.error('Failed to load problems bank');
+    }).finally(() => setLoading(false));
+  }, [user?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When activeIdFromUrl changes from outside (e.g. navigation link)
+  useEffect(() => {
+    if (activeIdFromUrl && problems.length > 0) {
+      const found = problems.find(p => p.id === activeIdFromUrl || p._id === activeIdFromUrl);
+      if (found && (!selectedProb || (selectedProb.id !== found.id && selectedProb._id !== found._id))) {
+        setSelectedProb(found);
+        loadProblemCode(found, selectedLang);
+        setRunResult(null);
+      }
+    }
+  }, [activeIdFromUrl, problems, selectedLang, selectedProb, loadProblemCode]);
+
+
+
+  // Filter drawer list
   useEffect(() => {
     let list = [...problems];
-    if (filters.diff !== 'All') {
-      list = list.filter((p) => p.difficulty === filters.diff);
+    if (drawerDiff !== 'All') {
+      list = list.filter(p => p.difficulty === drawerDiff.toLowerCase());
     }
-    if (filters.tag) {
-      list = list.filter((p) => p.tags?.includes(filters.tag));
+    if (drawerSearch.trim()) {
+      const q = drawerSearch.toLowerCase();
+      list = list.filter(p => p.title.toLowerCase().includes(q) || (p.tags || []).some(t => t.toLowerCase().includes(q)));
     }
-    if (filters.search) {
-      list = list.filter((p) => p.title.toLowerCase().includes(filters.search.toLowerCase()));
-    }
-    setFiltered(list);
-  }, [filters, problems]);
+    setFilteredProblems(list);
+  }, [drawerDiff, drawerSearch, problems]);
 
-  // Load starter templates when selection changes
-  useEffect(() => {
-    if (selectedProb) {
-      setCode(getStarterCode(selectedProb, selectedLang));
-    }
-  }, [selectedProb, selectedLang]);
 
-  // Select problem helper
-  const selectProblem = (p) => {
+  // Handle problem selection
+  const handleSelectProblem = (p) => {
     setSelectedProb(p);
+    setCode(STARTER_CODES[selectedLang] || '');
     setRunResult(null);
-    setHintText('');
-    setEditorialText('');
-    setActiveLeftTab('description');
     setIsDrawerOpen(false);
-    
-    // Reset typing analytics
-    startTimeRef.current = Date.now();
-    keystrokesRef.current = 0;
-    pasteCountRef.current = 0;
-    backspaceCountRef.current = 0;
-    deleteCountRef.current = 0;
-    idleTimeRef.current = 0;
+    navigate(`/problem/${p.id || p._id}`, { replace: true });
   };
 
   // Draggable divider logic
@@ -251,7 +236,7 @@ export default function Practice() {
 
     const handleMouseMove = (e) => {
       const percentage = (e.clientX / window.innerWidth) * 100;
-      if (percentage >= 30 && percentage <= 70) {
+      if (percentage >= 25 && percentage <= 75) {
         setSplitWidth(percentage);
       }
     };
@@ -262,128 +247,64 @@ export default function Practice() {
 
     window.addEventListener('mousemove', handleMouseMove);
     window.addEventListener('mouseup', handleMouseUp);
-
     return () => {
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
   }, [isDragging]);
 
-  // Timer tick for practicing
-  useEffect(() => {
-    if (isTimerPaused || !selectedProb) return;
-    const interval = setInterval(() => {
-      setTimeLeft((prev) => prev + 1);
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [isTimerPaused, selectedProb]);
-
-  const formatTimer = (seconds) => {
-    const hrs = Math.floor(seconds / 3600);
-    const mins = Math.floor((seconds % 3600) / 60);
-    const secs = seconds % 60;
-    return `${String(hrs).padStart(2, '0')}:${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`;
-  };
-
-  // Typing analytics recorders
-  const handleEditorKeyDown = (e) => {
-    keystrokesRef.current += 1;
-    lastTypeTimeRef.current = Date.now();
-
-    if (e.code === 'Backspace') {
-      backspaceCountRef.current += 1;
-    }
-    if (e.code === 'Delete') {
-      deleteCountRef.current += 1;
-    }
-  };
-
-  const handleEditorPaste = () => {
-    pasteCountRef.current += 1;
-  };
-
-  const handleEditorChange = (val) => {
-    setCode(val || '');
-    setSaveStatus('Saving...');
-  };
-
-  useEffect(() => {
-    if (saveStatus === 'Saving...') {
-      const t = setTimeout(() => {
-        setSaveStatus('Saved');
-      }, 500);
-      return () => clearTimeout(t);
-    }
-  }, [saveStatus]);
-
-  // Monaco mounts
+  // Editor Mount
   const handleEditorDidMount = (editor, monaco) => {
     editorRef.current = editor;
-
-    monaco.editor.defineTheme('leetcode-dark-custom', {
+    monaco.editor.defineTheme('hwb-dark-obsidian', {
       base: 'vs-dark',
       inherit: true,
       rules: [
         { token: 'comment', foreground: '6a9955', fontStyle: 'italic' },
-        { token: 'keyword', foreground: 'bb9af7' },
+        { token: 'keyword', foreground: 'bb9af7', fontStyle: 'bold' },
         { token: 'type', foreground: '7dd3fc' },
         { token: 'string', foreground: 'ff9e64' },
         { token: 'number', foreground: 'ff9e64' },
         { token: 'identifier', foreground: 'e0af68' },
       ],
       colors: {
-        'editor.background': '#1e1e2e',
-        'editor.foreground': '#c0caf5',
-        'editor.lineHighlightBackground': '#252538',
-        'editorLineNumber.foreground': '#5f5e5a',
-        'editorLineNumber.activeForeground': '#7F77DD',
+        'editor.background': '#0f172a',
+        'editor.foreground': '#e2e8f0',
+        'editor.lineHighlightBackground': '#1e293b55',
+        'editorLineNumber.foreground': '#475569',
+        'editorLineNumber.activeForeground': '#818cf8',
+        'editorCursor.foreground': '#38bdf8'
       }
     });
-    monaco.editor.setTheme('leetcode-dark-custom');
+    monaco.editor.setTheme('hwb-dark-obsidian');
 
     editor.onDidChangeCursorPosition((e) => {
       setCursorPos({ line: e.position.lineNumber, ch: e.position.column });
     });
   };
 
-  // AI Hints
-  const handleGetHint = async () => {
-    if (!selectedProb) return;
-    setLoadingHint(true);
-    setActiveLeftTab('hint');
-    try {
-      const r = await api.post('/ai/hint', { problemId: selectedProb.id || selectedProb._id, code });
-      setHintText(r.data.hint);
-    } catch {
-      setHintText('Hint unavailable. Analyze standard arrays/strings bounds.');
-    } finally {
-      setLoadingHint(false);
+  // Reset code to starter template
+  const handleResetCode = () => {
+    if (window.confirm('Reset code to starter template? Your current edits will be overwritten.')) {
+      setCode(STARTER_CODES[selectedLang] || '');
+      toast.success('Code reset to default template');
     }
   };
 
-  // AI Editorials
-  const handleGetEditorial = async () => {
-    if (!selectedProb) return;
-    setLoadingEditorial(true);
-    setActiveLeftTab('editorial');
-    try {
-      const r = await api.post('/ai/editorial', { problemId: selectedProb.id || selectedProb._id });
-      setEditorialText(r.data.editorial);
-    } catch {
-      setEditorialText('Editorial unavailable. Verify standard time complexities.');
-    } finally {
-      setLoadingEditorial(false);
-    }
+  // Copy code to clipboard
+  const handleCopyCode = () => {
+    navigator.clipboard.writeText(code);
+    toast.success('Code copied to clipboard!');
   };
 
-  // Confetti builder
+  // Trigger Confetti Celebration
   const triggerConfetti = () => {
     const particles = [];
     for (let i = 0; i < 120; i++) {
       particles.push({
         id: i,
         left: `${Math.random() * 100}%`,
-        color: ['#2cbb5d', '#7F77DD', '#f0a500', '#4fc3f7', '#ff6b6b', '#ffeb3b'][Math.floor(Math.random() * 6)],
+        color: ['#00b8a3', '#6366f1', '#f59e0b', '#38bdf8', '#ef4444', '#ec4899'][Math.floor(Math.random() * 6)],
         drift: Math.random(),
         delay: `${Math.random() * 2}s`,
         size: `${Math.random() * 8 + 6}px`
@@ -393,12 +314,57 @@ export default function Practice() {
     setTimeout(() => setConfetti([]), 3600);
   };
 
-  // Run code locally
+  // ⚡ RUN CODE (Deterministic evaluation on sample / custom inputs)
   const handleRunCode = async () => {
-    if (!selectedProb) return;
-    setConsoleHeight(280);
+    if (!selectedProb || !code.trim()) {
+      return toast.error('Please write some code before running');
+    }
+    setRunning(true);
+    setIsConsoleOpen(true);
+    setConsoleHeight(300);
     setActiveConsoleTab('result');
-    setRunResult('running');
+    setRunResult({ status: 'running' });
+
+    try {
+      const payload = {
+        code,
+        language: selectedLang,
+        problemId: selectedProb.id || selectedProb._id,
+        customInput: activeCaseIdx === -1 ? customInput : undefined
+      };
+
+      const res = await api.post('/submissions/run', payload);
+      setRunResult({
+        status: res.data.verdict,
+        ...res.data
+      });
+
+      if (res.data.verdict === 'AC') {
+        toast.success('Sample testcase passed! ✓');
+      } else if (res.data.verdict === 'CE') {
+        toast.error('Compilation Error. Check stderr log.');
+      } else {
+        toast.error(`Test run returned ${res.data.verdict}`);
+      }
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'Execution failed');
+      setRunResult({ status: 'CE', stderr: 'Execution server connection failed' });
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  // 🚀 SUBMIT CODE (Grades against all testcases + updates score/stats)
+  const handleSubmitCode = async () => {
+    if (!selectedProb || !code.trim()) {
+      return toast.error('Cannot submit empty code');
+    }
+    setSubmitting(true);
+    setIsConsoleOpen(true);
+    setConsoleHeight(300);
+    setActiveConsoleTab('result');
+    setRunResult({ status: 'running' });
+    toast.loading('Judging submission against all testcases…', { id: 'submit-judge' });
 
     try {
       const res = await api.post('/submissions', {
@@ -406,114 +372,102 @@ export default function Practice() {
         language: selectedLang,
         problemId: selectedProb.id || selectedProb._id
       });
+
       const sub = res.data;
       setRunResult({
         status: sub.verdict,
-        outputs: [
-          {
-            input: customInput || selectedProb.sampleInput || '',
-            output: sub.verdict === 'AC' ? (selectedProb.sampleOutput || '') : (sub.aiFeedback || 'Runtime mismatch logs'),
-            expected: selectedProb.sampleOutput || '',
-            passed: sub.verdict === 'AC'
-          }
-        ]
+        timeMs: sub.time,
+        memoryKb: sub.memory * 1024,
+        testsPassed: sub.testsPassed,
+        totalTests: sub.totalTests,
+        stderr: sub.aiFeedback,
+        testResults: sub.testResults || []
       });
-      if (sub.verdict === 'AC') toast.success('Sample run matched expected output!');
-      else toast.error(`Run completed as ${sub.verdict}`);
-    } catch {
-      toast.error('Code compilation failed.');
-      setRunResult(null);
-    }
-  };
 
-  // Submit code to database
-  const handleSubmitCode = async () => {
-    if (!selectedProb || !code.trim()) return toast.error('Source code is empty');
-    toast.loading('Submitting code to judge...', { id: 'submit-toast' });
+      toast.dismiss('submit-judge');
 
-    // Typing Analytics parameters
-    const elapsedSec = Math.floor((Date.now() - startTimeRef.current) / 1000);
-    const duration = Math.max(elapsedSec, 1);
-    const wpm = Math.floor((keystrokesRef.current / 5) / (duration / 60));
-    
-    const typingAnalytics = {
-      wpm,
-      avgWpm: wpm,
-      peakWpm: wpm + 10,
-      keystrokes: keystrokesRef.current,
-      totalCharacters: code.length,
-      pasteCount: pasteCountRef.current,
-      copyCount: 0,
-      backspaceCount: backspaceCountRef.current,
-      deleteCount: deleteCountRef.current,
-      activeTime: Math.floor(duration * 0.8),
-      idleTime: Math.floor(duration * 0.2),
-      codingDuration: duration
-    };
-
-    try {
-      const res = await api.post('/submissions', {
-        code,
-        language: selectedLang,
-        problemId: selectedProb.id || selectedProb._id,
-        typingAnalytics
-      });
-      toast.dismiss('submit-toast');
-      const sub = res.data;
-
-      setMySubmissions((prev) => [sub, ...prev]);
-      setActiveLeftTab('submissions');
+      // Refresh submissions
+      if (user?.id) {
+        api.get(`/submissions?userId=${user.id}`).then(r => setMySubmissions(r.data || [])).catch(() => {});
+      }
 
       if (sub.verdict === 'AC') {
-        toast.success('Accepted! Problem completed.');
+        toast.success('🎉 Correct Solution! Accepted (AC)');
         triggerConfetti();
+      } else if (sub.verdict === 'WA') {
+        toast.error('❌ Wrong Answer (WA)');
+      } else if (sub.verdict === 'TLE') {
+        toast.error('⏱️ Time Limit Exceeded (TLE)');
+      } else if (sub.verdict === 'CE') {
+        toast.error('⚠️ Compilation Error (CE)');
       } else {
-        toast.error(`Incorrect: ${sub.verdict}`);
-        
-        // Fetch AI analysis automatically on failure
-        try {
-          toast.loading('LLaMA analyzing wrong answer...', { id: 'ai-toast' });
-          const ai = await api.post('/ai/feedback', {
-            code,
-            verdict: sub.verdict,
-            problemId: selectedProb.id || selectedProb._id,
-            language: selectedLang
-          });
-          toast.dismiss('ai-toast');
-          await api.patch(`/submissions/${sub.id}/ai-feedback`, {
-            feedback: ai.data.feedback,
-            partialScore: ai.data.partialScore
-          });
-          
-          setMySubmissions(prev => {
-            return prev.map(s => {
-              if (s.id === sub.id || s._id === sub.id) {
-                return { ...s, aiFeedback: ai.data.feedback };
-              }
-              return s;
-            });
-          });
-          toast.success('AI feedback attached successfully');
-        } catch {}
+        toast.error(`Verdict: ${sub.verdict}`);
       }
-    } catch {
-      toast.dismiss('submit-toast');
-      toast.error('Submission failed.');
+    } catch (err) {
+      toast.dismiss('submit-judge');
+      toast.error(err.response?.data?.error || 'Submission failed');
+      setRunResult({ status: 'CE', stderr: 'Submission service rejected' });
+    } finally {
+      setSubmitting(false);
     }
   };
 
-  const getSolvedIds = () => new Set(mySubmissions.filter((s) => s.verdict === 'AC').map((s) => s.problemId || s.problemId?.id || s.problemId?._id));
+  // AI Chat message sender
+  const handleSendAiMsg = async () => {
+    if (!aiInput.trim() || aiThinking) return;
+    const userMsg = { role: 'user', text: aiInput.trim() };
+    setAiChatMsgs(prev => [...prev, userMsg]);
+    setAiInput('');
+    setAiThinking(true);
 
-  const toggleConsole = () => {
-    setConsoleHeight((prev) => (prev > 40 ? 40 : 280));
+    try {
+      const r = await api.post('/ai/chat', {
+        problemId: selectedProb?.id || selectedProb?._id,
+        messages: [{ role: 'user', content: userMsg.text }]
+      });
+      setAiChatMsgs(prev => [...prev, { role: 'assistant', text: r.data.message || 'No response' }]);
+    } catch (e) {
+      setAiChatMsgs(prev => [...prev, { role: 'assistant', text: 'AI assistant unavailable right now. Try reviewing constraints and bounds.' }]);
+    } finally {
+      setAiThinking(false);
+    }
   };
 
-  const selectedProbIndex = problems.findIndex(p => p.id === selectedProb?.id || p._id === selectedProb?.id) ?? 0;
-  const isSortListProblem = selectedProb?.title?.toLowerCase().includes('sort list');
+  if (loading) {
+    return (
+      <div className="lc-practice-loading">
+        <div className="spinner" />
+        <span style={{ color: 'var(--text-2)', fontSize: '13px', marginTop: '12px' }}>
+          Loading Coding Workspace…
+        </span>
+      </div>
+    );
+  }
+
+  // Get problem index and navigation helpers
+  const currentIdx = problems.findIndex(p => p.id === selectedProb?.id || p._id === selectedProb?.id);
+  const prevProb = currentIdx > 0 ? problems[currentIdx - 1] : null;
+  const nextProb = currentIdx < problems.length - 1 ? problems[currentIdx + 1] : null;
+
+  // Check solved status
+  const isProblemSolved = mySubmissions.some(s => 
+    (s.problemId === selectedProb?.id || s.problemId?._id === selectedProb?.id || s.problemId?.id === selectedProb?.id) && 
+    s.verdict === 'AC'
+  );
+
+  const problemSubmissions = mySubmissions.filter(s =>
+    s.problemId === selectedProb?.id || s.problemId?._id === selectedProb?.id || s.problemId?.id === selectedProb?.id
+  );
+
+  // Extract sample testcases for testcase tab
+  const sampleCases = selectedProb?.testCases?.filter(t => t.type === 'sample') || [];
+  if (sampleCases.length === 0 && selectedProb?.sampleInput) {
+    sampleCases.push({ input: selectedProb.sampleInput, output: selectedProb.sampleOutput || '' });
+  }
 
   return (
     <div className="lc-practice-container">
-      {/* 1. Confetti overlay */}
+      {/* Confetti overlay */}
       {confetti.length > 0 && (
         <div className="lc-confetti-wrapper">
           {confetti.map((p) => (
@@ -534,640 +488,861 @@ export default function Practice() {
       )}
 
       {/* Sliding Problem Drawer */}
-      <div className={`lc-psidebar-drawer ${isDrawerOpen ? 'open' : ''}`}>
-        <div className="lc-psidebar-header">
-          <span>Problems Browser</span>
-          <button className="text-gray-400 hover:text-white" onClick={() => setIsDrawerOpen(false)}>&times;</button>
+      <div className={`lc-pdrawer ${isDrawerOpen ? 'open' : ''}`}>
+        <div className="lc-pdrawer-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <Layers size={18} color="#818cf8" />
+            <span style={{ fontWeight: 700, fontSize: '14px', color: '#fff' }}>Problem Directory</span>
+          </div>
+          <button className="lc-pnav-btn" onClick={() => setIsDrawerOpen(false)}>✕</button>
         </div>
 
-        {/* Filters */}
-        <div className="lc-psidebar-search-box">
+        {/* Search & Filter Bar */}
+        <div className="lc-pdrawer-filters">
           <input
             type="text"
-            className="lc-psidebar-input text-xs"
-            placeholder="🔍 Search problems..."
-            value={filters.search}
-            onChange={(e) => setFilters((f) => ({ ...f, search: e.target.value }))}
+            className="lc-pdrawer-search"
+            placeholder="Search problems or tags…"
+            value={drawerSearch}
+            onChange={e => setDrawerSearch(e.target.value)}
           />
-          <div className="lc-psidebar-filters-row">
-            {DIFFICULTIES.map((d) => (
+          <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
+            {['All', 'Easy', 'Medium', 'Hard'].map(d => (
               <button
                 key={d}
-                className={`lc-psidebar-filter-tab ${filters.diff === d ? 'active' : ''}`}
-                onClick={() => setFilters((f) => ({ ...f, diff: d }))}
+                className={`lc-pfilter-pill ${drawerDiff === d ? 'active' : ''}`}
+                onClick={() => setDrawerDiff(d)}
               >
                 {d}
               </button>
             ))}
           </div>
-          <select
-            className="lc-psidebar-select text-[11px]"
-            value={filters.tag}
-            onChange={(e) => setFilters((f) => ({ ...f, tag: e.target.value }))}
-          >
-            <option value="">All tags</option>
-            {ALL_TAGS.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
         </div>
 
-        {/* Scrolling items list */}
-        <div className="lc-psidebar-scroll">
-          {dailyChallenge?.problemId && (
-            <div
-              className="m-3 p-3 bg-indigo-950/20 border border-indigo-500/20 rounded-lg cursor-pointer"
-              onClick={() => selectProblem(dailyChallenge.problemId)}
-            >
-              <div className="text-[10px] text-indigo-400 font-bold uppercase mb-1">⚡ Daily Challenge</div>
-              <div className="text-xs font-semibold text-white">{dailyChallenge.problemId.title}</div>
-            </div>
-          )}
-
-          {filtered.map((p) => {
-            const solved = getSolvedIds().has(p.id);
-            const lcSolved = p.source === 'leetcode' && p.leetcodeSlug && isLcSolved(p.leetcodeSlug);
-            const active = selectedProb?.id === p.id;
+        {/* Problem List */}
+        <div className="lc-pdrawer-list">
+          {filteredProblems.map((p, i) => {
+            const isSolved = mySubmissions.some(s => (s.problemId === p.id || s.problemId?._id === p.id) && s.verdict === 'AC');
+            const isActive = selectedProb?.id === p.id || selectedProb?._id === p.id;
             return (
               <div
-                key={p.id}
-                className={`lc-psidebar-item ${active ? 'active' : ''}`}
-                onClick={() => selectProblem(p)}
+                key={p.id || p._id || i}
+                className={`lc-pdrawer-item ${isActive ? 'active' : ''}`}
+                onClick={() => handleSelectProblem(p)}
               >
-                <div>
-                  <div className="lc-psidebar-title">
-                    {solved && <span className="text-green-500 mr-1.5 font-bold">✓</span>}
-                    {lcSolved && !solved && <span style={{color:'#FFA116',marginRight:'4px',fontWeight:700}}>✓</span>}
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flex: 1, minWidth: 0 }}>
+                  <span style={{ fontSize: '12px', color: isSolved ? '#10b981' : 'var(--text-3)' }}>
+                    {isSolved ? '✓' : '•'}
+                  </span>
+                  <span className="lc-pdrawer-title" style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
                     {p.title}
-                    {p.source === 'leetcode' && <span style={{marginLeft:'6px',fontSize:'9px',color:'#FFA116'}}>🔗LC</span>}
-                  </div>
-                  <div className="text-[10px] text-gray-400 mt-1 flex gap-2">
-                    <span className={p.difficulty === 'easy' ? 'text-green-400' : p.difficulty === 'hard' ? 'text-red-400' : 'text-amber-400'}>
-                      {p.difficulty}
-                    </span>
-                    <span>{p.points}pts</span>
-                  </div>
+                  </span>
                 </div>
+                <span className={`badge-diff ${p.difficulty}`}>{p.difficulty}</span>
               </div>
             );
           })}
         </div>
-
-        {/* User stats info panel */}
-        <div className="lc-psidebar-stats">
-          <div>
-            <span className="lc-pstat-val">{getSolvedIds().size}</span>
-            <span className="lc-pstat-lbl">Solved</span>
-          </div>
-          <div>
-            <span className="lc-pstat-val">{user.streak || 0} 🔥</span>
-            <span className="lc-pstat-lbl">Streak</span>
-          </div>
-          <div>
-            <span className="lc-pstat-val">{user.rating || 0}</span>
-            <span className="lc-pstat-lbl">Rating</span>
-          </div>
-        </div>
       </div>
 
-      {/* TOP INNER TOOLBAR */}
-      <div className="lc-practice-navbar">
+      {/* TOP WORKSPACE NAVIGATION BAR */}
+      <nav className="lc-practice-navbar">
+        {/* Left: Problem navigation controls */}
         <div className="lc-pnav-left">
-          <button className="lc-pnav-btn" onClick={() => setIsDrawerOpen(!isDrawerOpen)}>
-            <Menu size={16} />
-          </button>
-          <span className="lc-pnav-title" onClick={() => setIsDrawerOpen(!isDrawerOpen)}>
-            Problem List
-          </span>
-          <div className="lc-nav-divider" />
           <button
             className="lc-pnav-btn"
-            onClick={() => {
-              if (selectedProbIndex > 0) selectProblem(problems[selectedProbIndex - 1]);
-            }}
-            disabled={selectedProbIndex === 0}
+            onClick={() => navigate('/problems')}
+            title="Return to Problem Bank"
+          >
+            <ArrowLeft size={15} />
+            <span style={{ marginLeft: '4px' }}>Bank</span>
+          </button>
+
+          <div className="lc-pnav-divider" />
+
+          <button
+            className="lc-pnav-btn"
+            onClick={() => setIsDrawerOpen(!isDrawerOpen)}
+            title="Browse all problems"
+          >
+            <Menu size={16} />
+            <span style={{ marginLeft: '4px', fontWeight: 600 }}>Problems</span>
+          </button>
+
+          <button
+            className="lc-pnav-btn"
+            disabled={!prevProb}
+            onClick={() => prevProb && handleSelectProblem(prevProb)}
+            title="Previous Problem"
           >
             <ChevronLeft size={16} />
           </button>
+
           <button
             className="lc-pnav-btn"
-            onClick={() => {
-              if (selectedProbIndex < problems.length - 1) selectProblem(problems[selectedProbIndex + 1]);
-            }}
-            disabled={selectedProbIndex === problems.length - 1}
+            disabled={!nextProb}
+            onClick={() => nextProb && handleSelectProblem(nextProb)}
+            title="Next Problem"
           >
             <ChevronRight size={16} />
           </button>
+
           <button
             className="lc-pnav-btn"
             onClick={() => {
               if (problems.length > 0) {
-                const rand = Math.floor(Math.random() * problems.length);
-                selectProblem(problems[rand]);
+                const rand = problems[Math.floor(Math.random() * problems.length)];
+                handleSelectProblem(rand);
+                toast.success(`Shuffled to: ${rand.title}`);
               }
             }}
+            title="Pick Random Problem"
           >
             <Shuffle size={14} />
           </button>
+
+          <div className="lc-pnav-divider" />
+
+          {/* Active Problem Pill */}
+          <div className="lc-pnav-active-pill">
+            {isProblemSolved && <CheckCircle2 size={14} color="#10b981" />}
+            <span className="lc-pnav-active-title">{selectedProb?.title || 'Problem'}</span>
+            <span className={`badge-diff ${selectedProb?.difficulty || 'medium'}`}>
+              {selectedProb?.difficulty || 'medium'}
+            </span>
+          </div>
         </div>
 
+        {/* Center: Language & Run / Submit Controls */}
+        <div className="lc-pnav-center">
+          {/* Language Selector */}
+          <select
+            className="lc-plang-select"
+            value={selectedLang}
+            onChange={e => {
+              const newLang = e.target.value;
+              setSelectedLang(newLang);
+              setCode(STARTER_CODES[newLang] || '');
+            }}
+          >
+            {Object.entries(LANG_LABELS).map(([k, v]) => (
+              <option key={k} value={k}>{v}</option>
+            ))}
+          </select>
+
+          {/* Run Button */}
+          <button
+            className="btn-run"
+            onClick={handleRunCode}
+            disabled={running || submitting}
+          >
+            {running ? <RefreshCw size={13} className="animate-spin" /> : <Play size={13} fill="currentColor" />}
+            <span>Run</span>
+          </button>
+
+          {/* Submit Button */}
+          <button
+            className="btn-submit"
+            onClick={handleSubmitCode}
+            disabled={running || submitting}
+          >
+            {submitting ? <RefreshCw size={13} className="animate-spin" /> : <Upload size={13} />}
+            <span>Submit</span>
+          </button>
+        </div>
+
+        {/* Right: Tools & Settings */}
         <div className="lc-pnav-right">
-          {selectedProb && (
-            <div className="lc-timer-display text-xs text-indigo-400 font-mono" style={{ padding: '2px 8px' }}>
-              ⏱️ {formatTimer(timeLeft)}
+          {/* Code History Dropdown */}
+          <div style={{ position: 'relative' }}>
+            <button
+              className={`lc-pnav-btn ${isHistoryModalOpen ? 'active' : ''}`}
+              onClick={() => setIsHistoryModalOpen(!isHistoryModalOpen)}
+              title="Code History & 7-Day Auto-Saved Drafts"
+            >
+              <History size={14} />
+              <span style={{ marginLeft: '4px', fontSize: '11px', fontWeight: 600 }}>History</span>
+            </button>
+
+            {isHistoryModalOpen && (
+              <div className="lc-phistory-dropdown">
+                <div className="lc-phistory-title">
+                  <span>Code Versions (7-Day Cache)</span>
+                  <button className="lc-pnav-btn" onClick={() => setIsHistoryModalOpen(false)} style={{ padding: '2px 5px' }}>✕</button>
+                </div>
+                
+                {/* Option 1: Saved Draft */}
+                {draftTimestamp && (
+                  <div className="lc-phistory-item" onClick={() => {
+                    const probId = selectedProb?.id || selectedProb?._id;
+                    const saved = loadCodeDraft(user?.id, probId, selectedLang);
+                    if (saved && saved.code) {
+                      setCode(saved.code);
+                      toast.success(`Restored draft from ${formatTimeAgo(saved.updatedAt)}`);
+                    }
+                    setIsHistoryModalOpen(false);
+                  }}>
+                    <div className="lc-phistory-item-head">
+                      <span style={{ fontWeight: 700, color: '#818cf8' }}>💾 Auto-Saved Draft</span>
+                      <span style={{ fontSize: '10px', color: 'var(--text-3)' }}>{formatTimeAgo(draftTimestamp)}</span>
+                    </div>
+                    <div style={{ fontSize: '11px', color: 'var(--text-2)', marginTop: '2px' }}>
+                      Auto-saved working draft in {LANG_LABELS[selectedLang]}
+                    </div>
+                  </div>
+                )}
+
+                {/* Option 2: Last AC Submission */}
+                {(() => {
+                  const probId = selectedProb?.id || selectedProb?._id;
+                  const acSub = mySubmissions.find(s => 
+                    (s.problemId === probId || s.problemId?._id === probId || s.problemId?.id === probId) &&
+                    s.verdict === 'AC'
+                  );
+                  if (!acSub) return null;
+                  return (
+                    <div className="lc-phistory-item" onClick={() => {
+                      if (acSub.code) {
+                        setCode(acSub.code);
+                        if (acSub.language && acSub.language !== selectedLang) setSelectedLang(acSub.language);
+                        toast.success('Loaded last Accepted (AC) solution!');
+                      }
+                      setIsHistoryModalOpen(false);
+                    }}>
+                      <div className="lc-phistory-item-head">
+                        <span style={{ fontWeight: 700, color: '#10b981' }}>🏆 Last Accepted Solution</span>
+                        <span style={{ fontSize: '10px', color: 'var(--text-3)' }}>{new Date(acSub.timestamp).toLocaleDateString()}</span>
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-2)', marginTop: '2px' }}>
+                        {acSub.language} · {acSub.time}ms
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Option 3: Latest Submission */}
+                {(() => {
+                  const probId = selectedProb?.id || selectedProb?._id;
+                  const latestSub = mySubmissions.find(s => 
+                    s.problemId === probId || s.problemId?._id === probId || s.problemId?.id === probId
+                  );
+                  if (!latestSub) return null;
+                  return (
+                    <div className="lc-phistory-item" onClick={() => {
+                      if (latestSub.code) {
+                        setCode(latestSub.code);
+                        if (latestSub.language && latestSub.language !== selectedLang) setSelectedLang(latestSub.language);
+                        toast.success(`Loaded latest submission (${latestSub.verdict})`);
+                      }
+                      setIsHistoryModalOpen(false);
+                    }}>
+                      <div className="lc-phistory-item-head">
+                        <span style={{ fontWeight: 700, color: '#38bdf8' }}>⚡ Latest Submission</span>
+                        <span style={{ fontSize: '10px', color: 'var(--text-3)' }}>{formatTimeAgo(new Date(latestSub.timestamp).getTime())}</span>
+                      </div>
+                      <div style={{ fontSize: '11px', color: 'var(--text-2)', marginTop: '2px' }}>
+                        Verdict: {latestSub.verdict} ({latestSub.language})
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Option 4: Starter Code */}
+                <div className="lc-phistory-item" onClick={() => {
+                  handleResetCode();
+                  setIsHistoryModalOpen(false);
+                }}>
+                  <div className="lc-phistory-item-head">
+                    <span style={{ fontWeight: 700, color: '#f59e0b' }}>🔄 Reset Starter Code</span>
+                  </div>
+                  <div style={{ fontSize: '11px', color: 'var(--text-2)', marginTop: '2px' }}>
+                    Reset editor to original empty boilerplate template
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <div className="lc-pnav-divider" />
+
+          <button className="lc-pnav-btn" onClick={handleResetCode} title="Reset starter code">
+            <RotateCw size={14} />
+          </button>
+          <button className="lc-pnav-btn" onClick={handleCopyCode} title="Copy code">
+            <Copy size={14} />
+          </button>
+
+          <div className="lc-pnav-divider" />
+
+          <button
+            className="lc-pnav-btn"
+            onClick={() => setFontSize(f => f === 16 ? 12 : f + 2)}
+            title={`Font size: ${fontSize}px`}
+          >
+            <span style={{ fontSize: '11px', fontWeight: 700 }}>A±</span>
+          </button>
+
+          <button
+            className="lc-pnav-btn"
+            onClick={() => setIsLeftFullscreen(!isLeftFullscreen)}
+            title="Toggle Split View / Editor Fullscreen"
+          >
+            {isLeftFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+          </button>
+        </div>
+
+      </nav>
+
+      {/* MAIN TWO-PANE WORKSPACE */}
+      <div className="lc-pworkspace">
+        {/* LEFT PANEL: Problem Description, Editorial, Submissions, AI */}
+        {!isLeftFullscreen && (
+          <div className="lc-pleft-panel" style={{ width: `${splitWidth}%` }}>
+            {/* Tab Header */}
+            <div className="lc-ptabs-header">
+              <button
+                className={`lc-ptab-btn ${activeLeftTab === 'description' ? 'active' : ''}`}
+                onClick={() => setActiveLeftTab('description')}
+              >
+                <BookOpen size={14} />
+                <span>Description</span>
+              </button>
+              <button
+                className={`lc-ptab-btn ${activeLeftTab === 'editorial' ? 'active' : ''}`}
+                onClick={() => setActiveLeftTab('editorial')}
+              >
+                <HelpCircle size={14} />
+                <span>Editorial & Hints</span>
+              </button>
+              <button
+                className={`lc-ptab-btn ${activeLeftTab === 'submissions' ? 'active' : ''}`}
+                onClick={() => setActiveLeftTab('submissions')}
+              >
+                <History size={14} />
+                <span>Submissions ({problemSubmissions.length})</span>
+              </button>
+              <button
+                className={`lc-ptab-btn ${activeLeftTab === 'ai' ? 'active' : ''}`}
+                onClick={() => setActiveLeftTab('ai')}
+              >
+                <Sparkles size={14} color="#818cf8" />
+                <span>AI Mentor</span>
+              </button>
             </div>
-          )}
-          <button className="lc-pnav-btn" onClick={async () => {
-            if (user?.leetcode) {
-              const result = await lcSync();
-              if (result) toast.success(`Synced ${result.solvedCount} LC problems`);
-            } else {
-              toast.error('Connect LeetCode in your profile first');
-            }
-          }}>
-            <RefreshCw size={14} className={lcSyncing ? 'animate-spin' : ''} />
-          </button>
-          <button className="lc-pnav-btn">
-            <RotateCw size={14} onClick={() => loadData()} />
-          </button>
-          <button className="lc-pnav-btn">
-            <Settings size={14} />
-          </button>
+
+            {/* Tab Body */}
+            <div className="lc-ptabs-body">
+              {/* TAB 1: DESCRIPTION */}
+              {activeLeftTab === 'description' && (
+                <div className="lc-pdesc-container">
+                  {/* Title & Metadata */}
+                  <div className="lc-pdesc-header">
+                    <h1 className="lc-pdesc-title">{selectedProb?.title}</h1>
+                    <div className="lc-pdesc-badges">
+                      <span className={`badge-diff ${selectedProb?.difficulty || 'medium'}`}>
+                        {selectedProb?.difficulty}
+                      </span>
+                      <span className="badge-meta">{selectedProb?.points || 100} Points</span>
+                      <span className="badge-meta">Time: {selectedProb?.timeLimit || 1.0}s</span>
+                      <span className="badge-meta">Memory: {selectedProb?.memoryLimit || 256}MB</span>
+                    </div>
+
+                    {/* Tags */}
+                    {selectedProb?.tags && selectedProb.tags.length > 0 && (
+                      <div className="lc-ptags-row">
+                        {selectedProb.tags.map(t => (
+                          <span key={t} className="lc-ptag">{t}</span>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* LeetCode sync banner if applicable */}
+                  {selectedProb?.source === 'leetcode' && (
+                    <div className="lc-sync-banner">
+                      <span style={{ fontSize: '15px' }}>🟠</span>
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '12px', fontWeight: 600, color: '#ffa116' }}>LeetCode Problem</div>
+                        <div style={{ fontSize: '11px', color: 'var(--text-3)' }}>
+                          Solve directly here or solve on LeetCode. Solves auto-sync to HackWithBug.
+                        </div>
+                      </div>
+                      {selectedProb?.leetcodeUrl && (
+                        <a
+                          href={selectedProb.leetcodeUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="lc-pview-link"
+                        >
+                          LeetCode ↗
+                        </a>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Problem Statement */}
+                  <div className="lc-psection">
+                    <h3 className="lc-psection-title">Problem Statement</h3>
+                    <div className="lc-pstatement-text">
+                      {selectedProb?.statement || 'No statement provided.'}
+                    </div>
+                  </div>
+
+                  {/* Input / Output Format */}
+                  {selectedProb?.inputFormat && (
+                    <div className="lc-psection">
+                      <h3 className="lc-psection-title">Input Format</h3>
+                      <div className="lc-pformat-box">{selectedProb.inputFormat}</div>
+                    </div>
+                  )}
+
+                  {selectedProb?.outputFormat && (
+                    <div className="lc-psection">
+                      <h3 className="lc-psection-title">Output Format</h3>
+                      <div className="lc-pformat-box">{selectedProb.outputFormat}</div>
+                    </div>
+                  )}
+
+                  {/* Constraints */}
+                  {selectedProb?.constraints && (
+                    <div className="lc-psection">
+                      <h3 className="lc-psection-title">Constraints</h3>
+                      <div className="lc-pconstraints-box">
+                        {selectedProb.constraints.split('\n').map((c, i) => (
+                          <div key={i} className="lc-pconstraint-item">
+                            <code>{c}</code>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Sample Testcases */}
+                  {sampleCases.map((tc, i) => (
+                    <div key={i} className="lc-pexample-card">
+                      <div className="lc-pexample-head">
+                        <span>Example {i + 1}</span>
+                      </div>
+                      <div className="lc-pexample-block">
+                        <div className="lc-pexample-label">Input:</div>
+                        <pre className="lc-pexample-code">{tc.input || '(empty)'}</pre>
+                      </div>
+                      <div className="lc-pexample-block">
+                        <div className="lc-pexample-label">Output:</div>
+                        <pre className="lc-pexample-code">{tc.output || '(empty)'}</pre>
+                      </div>
+                      {selectedProb?.explanation && i === 0 && (
+                        <div className="lc-pexample-explanation">
+                          <strong>Explanation:</strong> {selectedProb.explanation}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {/* TAB 2: EDITORIAL & HINTS */}
+              {activeLeftTab === 'editorial' && (
+                <div className="lc-peditorial-container">
+                  <div className="card-title" style={{ marginBottom: '12px' }}>
+                    <BookOpen size={16} color="#818cf8" />
+                    <span>Algorithmic Approach & Editorial</span>
+                  </div>
+
+                  {selectedProb?.editorial ? (
+                    <div className="lc-pstatement-text">
+                      {selectedProb.editorial}
+                    </div>
+                  ) : (
+                    <div className="lc-pempty-box">
+                      No editorial published for this problem yet. Check back or use the AI Mentor tab for progressive hints.
+                    </div>
+                  )}
+
+                  {selectedProb?.optimalAlgorithm && (
+                    <div style={{ marginTop: '1.5rem' }}>
+                      <h4 style={{ fontSize: '13px', fontWeight: 700, color: '#a5b4fc', marginBottom: '6px' }}>
+                        Optimal Complexity
+                      </h4>
+                      <div className="lc-pformat-box">
+                        {selectedProb.optimalAlgorithm}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 3: SUBMISSIONS HISTORY */}
+              {activeLeftTab === 'submissions' && (
+                <div className="lc-psubs-container">
+                  <div className="card-title" style={{ marginBottom: '12px' }}>
+                    <History size={16} color="#818cf8" />
+                    <span>Your Submissions History</span>
+                  </div>
+
+                  {problemSubmissions.length === 0 ? (
+                    <div className="lc-pempty-box">
+                      No submissions made for this problem yet. Write code on the right and click Submit!
+                    </div>
+                  ) : (
+                    <table className="table" style={{ width: '100%' }}>
+                      <thead>
+                        <tr>
+                          <th>Verdict</th>
+                          <th>Language</th>
+                          <th>Runtime</th>
+                          <th>Memory</th>
+                          <th>Date</th>
+                          <th>Code</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {problemSubmissions.map(s => {
+                          const vStyle = VERDICT_STYLES[s.verdict] || VERDICT_STYLES.WA;
+                          const Icon = vStyle.icon;
+                          return (
+                            <tr key={s.id || s._id}>
+                              <td>
+                                <span className={`verdict-pill ${s.verdict}`}>
+                                  <Icon size={12} />
+                                  <span>{s.verdict}</span>
+                                </span>
+                              </td>
+                              <td className="mono" style={{ fontSize: '12px', color: 'var(--text-2)' }}>
+                                {s.language}
+                              </td>
+                              <td className="mono" style={{ fontSize: '12px', color: 'var(--text-3)' }}>
+                                {s.time ? `${s.time}ms` : '—'}
+                              </td>
+                              <td className="mono" style={{ fontSize: '12px', color: 'var(--text-3)' }}>
+                                {s.memory ? `${s.memory}MB` : '—'}
+                              </td>
+                              <td style={{ fontSize: '11px', color: 'var(--text-3)' }}>
+                                {new Date(s.timestamp).toLocaleDateString()}
+                              </td>
+                              <td>
+                                <button
+                                  className="btn btn-secondary btn-sm"
+                                  onClick={() => setSelectedSubForView(s)}
+                                  style={{ padding: '2px 8px', fontSize: '11px' }}
+                                >
+                                  View
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  )}
+                </div>
+              )}
+
+              {/* TAB 4: AI MENTOR */}
+              {activeLeftTab === 'ai' && (
+                <div className="lc-pai-chat-container">
+                  <div className="lc-pai-msgs-list">
+                    {aiChatMsgs.map((m, i) => (
+                      <div key={i} className={`lc-pai-msg ${m.role}`}>
+                        <div className="lc-pai-bubble">
+                          {m.text}
+                        </div>
+                      </div>
+                    ))}
+                    {aiThinking && (
+                      <div className="lc-pai-msg assistant">
+                        <div className="lc-pai-bubble thinking">
+                          <Sparkles size={14} className="animate-spin" />
+                          <span>Thinking…</span>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Quick Prompts */}
+                  <div className="lc-pai-quick-prompts">
+                    <button onClick={() => setAiInput('Can you give me a progressive hint for this problem?')}>
+                      💡 Give me a hint
+                    </button>
+                    <button onClick={() => setAiInput('What is the optimal time and space complexity?')}>
+                      ⏱️ Optimal complexity
+                    </button>
+                    <button onClick={() => setAiInput('What edge cases should I be careful of?')}>
+                      ⚠️ Tricky edge cases
+                    </button>
+                  </div>
+
+                  {/* Input Box */}
+                  <div className="lc-pai-input-bar">
+                    <input
+                      type="text"
+                      placeholder="Ask AI mentor a question…"
+                      value={aiInput}
+                      onChange={e => setAiInput(e.target.value)}
+                      onKeyDown={e => e.key === 'Enter' && handleSendAiMsg()}
+                    />
+                    <button onClick={handleSendAiMsg} disabled={aiThinking || !aiInput.trim()}>
+                      <Send size={14} />
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* DRAGGABLE DIVIDER */}
+        {!isLeftFullscreen && (
+          <div className="lc-pdivider" onMouseDown={handleMouseDown} />
+        )}
+
+        {/* RIGHT PANEL: Monaco Code Editor & Bottom Console */}
+        <div className="lc-pright-panel" style={{ width: isLeftFullscreen ? '100%' : `${100 - splitWidth}%` }}>
+          {/* Monaco Editor Container */}
+          <div className="lc-peditor-wrapper" style={{ height: isConsoleOpen ? `calc(100% - ${consoleHeight}px)` : 'calc(100% - 42px)' }}>
+            <Editor
+              height="100%"
+              language={MONACO_LANGS[selectedLang] || 'cpp'}
+              value={code}
+              onChange={val => {
+                const newCode = val || '';
+                setCode(newCode);
+                setSaveStatus('Saving…');
+                if (selectedProb) {
+                  const probId = selectedProb.id || selectedProb._id;
+                  saveCodeDraft(user?.id, probId, selectedLang, newCode);
+                  setDraftTimestamp(Date.now());
+                  setTimeout(() => setSaveStatus('Saved (7d Cache)'), 300);
+                }
+              }}
+              onMount={handleEditorDidMount}
+              options={{
+                fontSize: fontSize,
+                minimap: { enabled: false },
+                scrollBeyondLastLine: false,
+                lineNumbers: 'on',
+                automaticLayout: true,
+                tabSize: 4,
+                fontFamily: "'JetBrains Mono', 'Fira Code', 'Courier New', monospace",
+                cursorSmoothCaretAnimation: 'on',
+                bracketPairColorization: { enabled: true },
+                padding: { top: 12, bottom: 12 }
+              }}
+            />
+          </div>
+
+          {/* BOTTOM CONSOLE PANEL */}
+          <div
+            className={`lc-pconsole-panel ${isConsoleOpen ? 'open' : 'collapsed'}`}
+            style={{ height: isConsoleOpen ? `${consoleHeight}px` : '42px' }}
+          >
+            {/* Console Bar / Tabs */}
+            <div className="lc-pconsole-bar">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <button
+                  className="lc-pconsole-toggle-btn"
+                  onClick={() => setIsConsoleOpen(!isConsoleOpen)}
+                  title="Toggle console"
+                >
+                  <Terminal size={14} />
+                  <span>Console</span>
+                  <span style={{ fontSize: '10px' }}>{isConsoleOpen ? '▼' : '▲'}</span>
+                </button>
+
+                {isConsoleOpen && (
+                  <>
+                    <button
+                      className={`lc-pconsole-tab-btn ${activeConsoleTab === 'testcase' ? 'active' : ''}`}
+                      onClick={() => setActiveConsoleTab('testcase')}
+                    >
+                      Testcases
+                    </button>
+                    <button
+                      className={`lc-pconsole-tab-btn ${activeConsoleTab === 'result' ? 'active' : ''}`}
+                      onClick={() => setActiveConsoleTab('result')}
+                    >
+                      Test Result
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {/* Cursor position & save status */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px', fontSize: '11px', color: 'var(--text-3)' }}>
+                <span>Ln {cursorPos.line}, Col {cursorPos.ch}</span>
+                <span className="badge-meta">{saveStatus}</span>
+              </div>
+            </div>
+
+            {/* Console Content */}
+            {isConsoleOpen && (
+              <div className="lc-pconsole-content">
+                {/* TAB 1: TESTCASE SELECTOR & CUSTOM INPUT */}
+                {activeConsoleTab === 'testcase' && (
+                  <div>
+                    {/* Case Pills */}
+                    <div className="lc-pcase-pills">
+                      {sampleCases.map((tc, idx) => (
+                        <button
+                          key={idx}
+                          className={`lc-pcase-pill ${activeCaseIdx === idx ? 'active' : ''}`}
+                          onClick={() => setActiveCaseIdx(idx)}
+                        >
+                          Case {idx + 1}
+                        </button>
+                      ))}
+                      <button
+                        className={`lc-pcase-pill ${activeCaseIdx === -1 ? 'active' : ''}`}
+                        onClick={() => setActiveCaseIdx(-1)}
+                      >
+                        + Custom Input
+                      </button>
+                    </div>
+
+                    {/* Input Box */}
+                    {activeCaseIdx >= 0 ? (
+                      <div className="lc-pcase-box">
+                        <div className="lc-pcase-label">Standard Input:</div>
+                        <pre className="lc-pcase-val">
+                          {sampleCases[activeCaseIdx]?.input || '(No input required)'}
+                        </pre>
+                        <div className="lc-pcase-label" style={{ marginTop: '8px' }}>Expected Output:</div>
+                        <pre className="lc-pcase-val">
+                          {sampleCases[activeCaseIdx]?.output || '(None)'}
+                        </pre>
+                      </div>
+                    ) : (
+                      <div className="lc-pcase-box">
+                        <div className="lc-pcase-label">Custom Standard Input:</div>
+                        <textarea
+                          className="lc-pcustom-textarea"
+                          rows={4}
+                          placeholder="Type custom standard input here…"
+                          value={customInput}
+                          onChange={e => setCustomInput(e.target.value)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* TAB 2: TEST RESULT */}
+                {activeConsoleTab === 'result' && (
+                  <div>
+                    {!runResult ? (
+                      <div className="lc-pempty-box">
+                        Click "Run" or "Submit" to see execution output and diagnostics.
+                      </div>
+                    ) : runResult.status === 'running' ? (
+                      <div className="lc-presult-loading">
+                        <RefreshCw size={18} className="animate-spin" color="#818cf8" />
+                        <span>Compiling and executing against testcases…</span>
+                      </div>
+                    ) : (
+                      <div className="lc-presult-box">
+                        {/* Status Header */}
+                        <div className="lc-presult-header">
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <span className={`verdict-pill ${runResult.status}`}>
+                              {runResult.status === 'AC' ? <CheckCircle2 size={15} /> : <XCircle size={15} />}
+                              <span style={{ fontSize: '13px', fontWeight: 800 }}>
+                                {runResult.status === 'AC' ? 'Accepted' : runResult.status === 'WA' ? 'Wrong Answer' : runResult.status === 'TLE' ? 'Time Limit Exceeded' : runResult.status === 'CE' ? 'Compilation Error' : 'Runtime Error'}
+                              </span>
+                            </span>
+                            {runResult.testsPassed !== undefined && (
+                              <span className="badge-meta">
+                                {runResult.testsPassed} / {runResult.totalTests} Testcases Passed
+                              </span>
+                            )}
+                          </div>
+
+                          <div style={{ display: 'flex', gap: '8px', fontSize: '11px', color: 'var(--text-3)' }}>
+                            {runResult.timeMs !== undefined && <span>⏱️ Runtime: <strong>{runResult.timeMs}ms</strong></span>}
+                            {runResult.memoryKb !== undefined && <span>💾 Memory: <strong>{Math.round(runResult.memoryKb / 1024)}MB</strong></span>}
+                          </div>
+                        </div>
+
+                        {/* Stderr or compiler logs */}
+                        {runResult.stderr && (
+                          <div className="lc-pstderr-box">
+                            <div style={{ fontWeight: 700, color: '#f43f5e', marginBottom: '4px' }}>Compiler & Diagnostics Log:</div>
+                            <pre>{runResult.stderr}</pre>
+                          </div>
+                        )}
+
+                        {/* Testcase outputs breakdown */}
+                        {runResult.testResults && runResult.testResults.length > 0 ? (
+                          <div style={{ marginTop: '12px' }}>
+                            {runResult.testResults.map((tr, idx) => (
+                              <div key={idx} className={`lc-ptr-row ${tr.passed ? 'passed' : 'failed'}`}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '6px' }}>
+                                  <span style={{ fontWeight: 700, fontSize: '12px', color: tr.passed ? '#10b981' : '#ef4444' }}>
+                                    Test Case #{idx + 1} ({tr.type}) — {tr.passed ? 'PASSED ✓' : 'FAILED ✗'}
+                                  </span>
+                                  <span style={{ fontSize: '11px', color: 'var(--text-3)' }}>{tr.timeMs}ms</span>
+                                </div>
+                                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '8px' }}>
+                                  <div>
+                                    <div className="lc-pcase-label">📥 Input:</div>
+                                    <pre className="lc-pex-code" style={{ borderColor: 'rgba(129, 140, 248, 0.3)' }}>{tr.input || '(empty)'}</pre>
+                                  </div>
+                                  <div>
+                                    <div className="lc-pcase-label">✅ Expected Output:</div>
+                                    <pre className="lc-pex-code">{tr.expectedOutput || '(empty)'}</pre>
+                                  </div>
+                                  <div>
+                                    <div className="lc-pcase-label">📤 Actual Output:</div>
+                                    <pre className="lc-pex-code" style={{ borderColor: tr.passed ? 'rgba(16,185,129,0.3)' : 'rgba(239,68,68,0.4)', color: !tr.passed && !tr.actualOutput && tr.stderr ? '#f87171' : undefined }}>
+                                      {tr.actualOutput || (tr.stderr ? `[Runtime Error]\n${tr.stderr}` : '(empty)')}
+                                    </pre>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : runResult.stdout !== undefined && (
+                          <div style={{ marginTop: '12px' }}>
+                            <div className="lc-pcase-label">Standard Output:</div>
+                            <pre className="lc-pex-code">{runResult.stdout || '(No output produced)'}</pre>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </div>
 
-      {/* MAIN CONTENT SPLIT PANELS */}
-      {selectedProb ? (
-        <div className="lc-pworkspace">
-          {/* LEFT PANEL */}
-          <div
-            className="lc-pleft-panel"
-            style={{ width: isLeftFullscreen ? '100%' : `${splitWidth}%` }}
-          >
-            <div className="pe-tabs-row">
-              <div className="pe-tabs-list">
-                <button
-                  className={`pe-tab-btn ${activeLeftTab === 'description' ? 'active' : ''}`}
-                  onClick={() => setActiveLeftTab('description')}
-                >
-                  📋 Description
-                </button>
-                <button
-                  className={`pe-tab-btn ${activeLeftTab === 'hint' ? 'active' : ''}`}
-                  onClick={handleGetHint}
-                >
-                  💡 AI Hint
-                </button>
-                <button
-                  className={`pe-tab-btn ${activeLeftTab === 'editorial' ? 'active' : ''}`}
-                  onClick={handleGetEditorial}
-                >
-                  📖 Editorial
-                </button>
-                <button
-                  className={`pe-tab-btn ${activeLeftTab === 'submissions' ? 'active' : ''}`}
-                  onClick={() => setActiveLeftTab('submissions')}
-                >
-                  📊 Submissions
-                </button>
-              </div>
-              <div>
-                <button className="lc-nav-btn" onClick={() => setIsLeftFullscreen(!isLeftFullscreen)}>
-                  {isLeftFullscreen ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
-                </button>
-              </div>
-            </div>
-
-            {/* Scrollable contents */}
-            <div className="pe-panel-body">
-              {activeLeftTab === 'description' && (
-                <div className="lc-prose">
-                  <div className="lc-problem-title-row">
-                    <h1 className="lc-problem-title">
-                      {selectedProbIndex + 1}. {selectedProb.title}
-                    </h1>
-                    {getSolvedIds().has(selectedProb.id) && <span className="lc-solved-badge">Solved ✓</span>}
-                  </div>
-
-                  <div className="lc-meta-row">
-                    <span className={`lc-diff-pill ${selectedProb.difficulty}`}>{selectedProb.difficulty}</span>
-                    <span className="lc-meta-tag">Points: {selectedProb.points}</span>
-                    <span className="lc-meta-tag">Limit: {selectedProb.timeLimit}s</span>
-                    <span className="lc-meta-tag">Memory: {selectedProb.memoryLimit}MB</span>
-                  </div>
-
-                  <p>{selectedProb.statement}</p>
-
-                  {/* LeetCode: Open on LeetCode button */}
-                  {selectedProb.source === 'leetcode' && selectedProb.leetcodeUrl && (
-                    <div style={{margin:'16px 0',padding:'12px 16px',borderRadius:'8px',background:'rgba(255,161,22,0.08)',border:'1px solid rgba(255,161,22,0.2)',display:'flex',alignItems:'center',justifyContent:'space-between'}}>
-                      <div style={{display:'flex',alignItems:'center',gap:'8px'}}>
-                        <span style={{fontSize:'18px'}}>🔗</span>
-                        <div>
-                          <div style={{fontSize:'13px',fontWeight:700,color:'#FFA116'}}>This is a LeetCode problem</div>
-                          <div style={{fontSize:'11px',color:'#a0a0a0'}}>Solve it on LeetCode, then sync your progress here</div>
-                        </div>
-                      </div>
-                      <a
-                        href={selectedProb.leetcodeUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        style={{display:'flex',alignItems:'center',gap:'6px',padding:'6px 14px',borderRadius:'6px',background:'#FFA116',color:'#000',fontWeight:700,fontSize:'12px',textDecoration:'none',whiteSpace:'nowrap'}}
-                      >
-                        <ExternalLink size={13} /> Open on LeetCode
-                      </a>
-                    </div>
-                  )}
-
-                  {/* SVG linked list representations if it is sort list problem */}
-                  {isSortListProblem && (
-                    <div className="lc-example-box">
-                      <div className="lc-example-title font-bold">Example 1:</div>
-                      <div className="lc-svg-diagram">
-                        <svg width="340" height="180" viewBox="0 0 340 180">
-                          <defs>
-                            <marker id="arrow" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                              <path d="M 0 0 L 10 5 L 0 10 z" fill="#9c9a92" />
-                            </marker>
-                            <marker id="arrow-active" viewBox="0 0 10 10" refX="2" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-                              <path d="M 0 0 L 10 5 L 0 10 z" fill="#f0a500" />
-                            </marker>
-                          </defs>
-                          <g>
-                            <circle cx="40" cy="40" r="28" className="lc-svg-node-circle" />
-                            <text x="40" y="40" className="lc-svg-node-text">4</text>
-                            <line x1="68" y1="40" x2="90" y2="40" className="lc-svg-arrow" marker-end="url(#arrow)" />
-                            <circle cx="120" cy="40" r="28" className="lc-svg-node-circle" />
-                            <text x="120" y="40" className="lc-svg-node-text">2</text>
-                            <line x1="148" y1="40" x2="170" y2="40" className="lc-svg-arrow" marker-end="url(#arrow)" />
-                            <circle cx="200" cy="40" r="28" className="lc-svg-node-circle" />
-                            <text x="200" y="40" className="lc-svg-node-text">1</text>
-                            <line x1="228" y1="40" x2="250" y2="40" className="lc-svg-arrow" marker-end="url(#arrow)" />
-                            <circle cx="280" cy="40" r="28" className="lc-svg-node-circle" />
-                            <text x="280" y="40" className="lc-svg-node-text">3</text>
-                          </g>
-                          <line x1="160" y1="74" x2="160" y2="102" className="lc-svg-down-arrow" marker-end="url(#arrow-active)" />
-                          <g>
-                            <circle cx="40" cy="140" r="28" className="lc-svg-node-circle" />
-                            <text x="40" y="140" className="lc-svg-node-text">1</text>
-                            <line x1="68" y1="140" x2="90" y2="140" className="lc-svg-arrow" marker-end="url(#arrow)" />
-                            <circle cx="120" cy="140" r="28" className="lc-svg-node-circle" />
-                            <text x="120" y="140" className="lc-svg-node-text">2</text>
-                            <line x1="148" y1="140" x2="170" y2="140" className="lc-svg-arrow" marker-end="url(#arrow)" />
-                            <circle cx="200" cy="140" r="28" className="lc-svg-node-circle" />
-                            <text x="200" y="140" className="lc-svg-node-text">3</text>
-                            <line x1="228" y1="140" x2="250" y2="140" className="lc-svg-arrow" marker-end="url(#arrow)" />
-                            <circle cx="280" cy="140" r="28" className="lc-svg-node-circle" />
-                            <text x="280" y="140" className="lc-svg-node-text">4</text>
-                          </g>
-                        </svg>
-                      </div>
-                    </div>
-                  )}
-
-                  {selectedProb.sampleInput && (
-                    <div className="lc-example-box">
-                      <div className="lc-example-title font-bold">Sample Parameters:</div>
-                      <div className="lc-example-body">
-                        <pre className="lc-example-pre">
-<strong>Input:</strong>
-{selectedProb.sampleInput}
-
-<strong>Output:</strong>
-{selectedProb.sampleOutput}
-                        </pre>
-                      </div>
-                    </div>
-                  )}
-
-                  {selectedProb.constraints && (
-                    <div style={{ marginTop: '16px' }}>
-                      <div className="lc-example-title font-bold">Constraints:</div>
-                      <pre className="bg-white/5 p-4 rounded-md text-xs text-gray-300 font-mono overflow-x-auto">{selectedProb.constraints}</pre>
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {activeLeftTab === 'hint' && (
-                <div className="lc-prose">
-                  <div className="pe-hint-header font-bold text-xs uppercase text-indigo-400">💡 AI Hint Suggestion</div>
-                  {loadingHint ? (
-                    <div className="text-gray-400 animate-pulse py-4">Generating Hint...</div>
-                  ) : (
-                    <p className="leading-relaxed text-sm text-gray-200 mt-2">{hintText || 'Click AI Hint tab to trigger recommendations.'}</p>
-                  )}
-                </div>
-              )}
-
-              {activeLeftTab === 'editorial' && (
-                <div className="lc-prose">
-                  <div className="pe-hint-header font-bold text-xs uppercase text-indigo-400">📖 AI Analysis Editorial</div>
-                  {loadingEditorial ? (
-                    <div className="text-gray-400 animate-pulse py-4">Generating Editorial Walkthrough...</div>
-                  ) : (
-                    <pre className="pe-editorial-body text-xs text-gray-200 mt-2 leading-relaxed bg-[#1e1e1e]/60 p-4 rounded border border-white/5 overflow-x-auto">
-                      {editorialText || 'Click Editorial tab to parse algorithm strategies.'}
-                    </pre>
-                  )}
-                </div>
-              )}
-
-              {activeLeftTab === 'submissions' && (
-                <div className="lc-submissions-list">
-                  {mySubmissions
-                    .filter((s) => s.problemId === selectedProb.id || s.problemId?.id === selectedProb.id || s.problemId?._id === selectedProb.id)
-                    .map((sub, idx) => {
-                      const subId = sub._id || sub.id;
-                      const isExpanded = expandedSubId === subId;
-                      return (
-                        <div
-                          key={subId || idx}
-                          className={`lc-submission-item cursor-pointer ${isExpanded ? 'expanded' : ''}`}
-                          onClick={() => setExpandedSubId(isExpanded ? null : subId)}
-                        >
-                          <div className="lc-sub-header-row w-full">
-                            <div>
-                              <span className={`lc-sub-verdict ${sub.verdict.toLowerCase()}`}>
-                                {sub.verdict === 'AC' ? 'Accepted' : sub.verdict === 'WA' ? 'Wrong Answer' : sub.verdict === 'CE' ? 'Compile Error' : sub.verdict === 'RE' ? 'Runtime Error' : sub.verdict}
-                              </span>
-                              <div className="lc-sub-meta mt-1">
-                                <span>{LANG_LABELS[sub.language] || sub.language}</span>
-                                <span>{new Date(sub.timestamp).toLocaleDateString()}</span>
-                              </div>
-                            </div>
-                            <div className="text-right text-[11px] text-gray-400">
-                              <div>Runtime: {sub.time ? `${sub.time}ms` : 'N/A'}</div>
-                              <div>Memory: {sub.memory ? `${sub.memory}MB` : 'N/A'}</div>
-                            </div>
-                          </div>
-                          
-                          {isExpanded && (
-                            <div className="w-full flex flex-col gap-2 mt-2" onClick={e => e.stopPropagation()}>
-                              <div className="text-[10px] font-bold text-gray-400">CODE SUBMITTED:</div>
-                              <pre className="lc-sub-detail-panel">{sub.code}</pre>
-                              {sub.aiFeedback && (
-                                <>
-                                  <div className="text-[10px] font-bold text-indigo-400">AI DETAILED REVIEW:</div>
-                                  <pre className="lc-sub-detail-panel border-indigo-500/20 bg-indigo-950/20 text-indigo-200">
-                                    {sub.aiFeedback}
-                                  </pre>
-                                </>
-                              )}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  {mySubmissions.filter(
-                    (s) => s.problemId === selectedProb.id || s.problemId?.id === selectedProb.id || s.problemId?._id === selectedProb.id
-                  ).length === 0 && (
-                    <div className="text-center text-xs text-gray-500 py-6">No previous attempts recorded for this problem.</div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* Left panel status footer bar */}
-            <div className="lc-status-bar">
-              <div className="lc-status-left">
-                <span className="lc-status-action">👍 13.1K</span>
-                <span className="lc-status-action">👎</span>
-                <span
-                  className={`lc-status-action ${bookmarked ? 'active' : ''}`}
-                  onClick={() => {
-                    setBookmarked(!bookmarked);
-                    toast.success(bookmarked ? 'Bookmark removed' : 'Problem bookmarked!');
-                  }}
-                >
-                  <Star size={14} fill={bookmarked ? 'currentColor' : 'none'} /> {bookmarked ? 'Bookmarked' : 'Bookmark'}
+      {/* Code Viewer Modal for Submissions */}
+      {selectedSubForView && (
+        <div className="lc-pmodal-overlay" onClick={() => setSelectedSubForView(null)}>
+          <div className="lc-pmodal-card" onClick={e => e.stopPropagation()}>
+            <div className="lc-pmodal-head">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <span className={`verdict-pill ${selectedSubForView.verdict}`}>
+                  {selectedSubForView.verdict}
                 </span>
-                <span className="lc-status-action" onClick={() => {
-                  navigator.clipboard.writeText(window.location.href);
-                  toast.success('Link copied to clipboard!');
-                }}>
-                  <Share2 size={14} /> Share
+                <span style={{ fontWeight: 700, fontSize: '14px', color: '#fff' }}>
+                  Submitted Code ({selectedSubForView.language})
                 </span>
               </div>
-              <div className="lc-status-right">
-                <span className="lc-status-action">
-                  <HelpCircle size={14} /> Help
-                </span>
-              </div>
+              <button className="lc-pnav-btn" onClick={() => setSelectedSubForView(null)}>✕</button>
             </div>
-          </div>
-
-          {/* DRAGGABLE HANDLE */}
-          {!isLeftFullscreen && (
-            <div
-              className={`lc-pdivider ${isDragging ? 'dragging' : ''}`}
-              onMouseDown={handleMouseDown}
-            />
-          )}
-
-          {/* RIGHT PANEL */}
-          {!isLeftFullscreen && (
-            <div className="lc-pright-panel">
-              {/* Editor Workspace */}
-              <div className="pe-editor-container" style={{ height: `calc(100% - ${consoleHeight}px)` }}>
-                {/* Header controls */}
-                <div className="pe-editor-header">
-                  <div className="pe-editor-header-left">
-                    <select
-                      className="lc-select-lang"
-                      value={selectedLang}
-                      onChange={(e) => setSelectedLang(e.target.value)}
-                    >
-                      <option value="cpp17">C++</option>
-                      <option value="python3">Python3</option>
-                      <option value="java17">Java</option>
-                      <option value="c">C</option>
-                    </select>
-                    <span className="lc-autosave-indicator ml-2">
-                      <Lock size={11} /> Auto
-                    </span>
-                  </div>
-                  <div className="pe-editor-header-right">
-                    <button
-                      className="lc-pnav-btn"
-                      onClick={() => {
-                        setCode(getStarterCode(selectedProb, selectedLang));
-                        toast.success('Editor templates reset');
-                      }}
-                    >
-                      Reset
-                    </button>
-                    <button className="lc-btn-run" onClick={handleRunCode}>
-                      Run
-                    </button>
-                    <button className="lc-btn-submit" onClick={handleSubmitCode}>
-                      Submit ↗
-                    </button>
-                  </div>
-                </div>
-
-                {/* Monaco Editor frame */}
-                <div className="pe-monaco-area" onKeyDown={handleEditorKeyDown} onPaste={handleEditorPaste}>
-                  <div className="pe-monaco-mock">
-                    <Editor
-                      height="100%"
-                      language={MONACO_LANGS[selectedLang]}
-                      value={code}
-                      onChange={handleEditorChange}
-                      onMount={handleEditorDidMount}
-                      loading={<div className="flex items-center justify-center h-full text-indigo-400">Loading IDE modules...</div>}
-                      options={{
-                        fontSize: 14,
-                        minimap: { enabled: false },
-                        automaticLayout: true,
-                        lineHeight: 22,
-                        fontFamily: "'JetBrains Mono', 'Fira Code', monospace"
-                      }}
-                    />
-                    {/* overlays */}
-                    <div className="lc-editor-overlay-saved">{saveStatus}</div>
-                    <div className="lc-editor-overlay-cursor">
-                      Ln {cursorPos.line}, Col {cursorPos.ch}
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Collapsible Console drawer */}
-              <div className="pe-console-drawer" style={{ height: `${consoleHeight}px` }}>
-                <div className="pe-console-tabs">
-                  <div className="flex gap-4">
-                    <button
-                      className={`pe-console-tab-btn ${activeConsoleTab === 'testcase' ? 'active' : ''}`}
-                      onClick={() => {
-                        setConsoleHeight(280);
-                        setActiveConsoleTab('testcase');
-                      }}
-                    >
-                      ✓ Testcase
-                    </button>
-                    <button
-                      className={`pe-console-tab-btn ${activeConsoleTab === 'result' ? 'active' : ''}`}
-                      onClick={() => {
-                        setConsoleHeight(280);
-                        setActiveConsoleTab('result');
-                      }}
-                    >
-                      {runResult === 'running' ? (
-                        <span className="flex items-center gap-1"><span className="animate-spin text-xs">⌛</span> Test Result</span>
-                      ) : (
-                        <span>{'>_'} Test Result</span>
-                      )}
-                    </button>
-                  </div>
-                  <div>
-                    <button className="lc-pnav-btn" onClick={toggleConsole} title="Toggle Console height">
-                      {consoleHeight > 40 ? <ChevronDown size={14} /> : <ChevronUp size={14} />}
-                    </button>
-                  </div>
-                </div>
-
-                {/* Console Panel drawer Body */}
-                <div className="pe-console-body">
-                  {activeConsoleTab === 'testcase' ? (
-                    <div>
-                      <div className="lc-testcase-label">Custom Test Stdin</div>
-                      <textarea
-                        rows={4}
-                        className="lc-testcase-input font-mono"
-                        value={customInput || selectedProb.sampleInput || ''}
-                        onChange={(e) => setCustomInput(e.target.value)}
-                        placeholder="Provide parameters to run compiled code against..."
-                      />
-                    </div>
-                  ) : (
-                    <div style={{ height: '100%' }}>
-                      {runResult === null ? (
-                        <div className="pe-welcome-container" style={{ padding: 0, justifyContent: 'center' }}>
-                          <span className="text-gray-500 text-xs">You must run your code first</span>
-                        </div>
-                      ) : runResult === 'running' ? (
-                        <div className="flex flex-col items-center justify-center h-full text-indigo-400 gap-1.5">
-                          <div className="animate-pulse font-semibold text-xs">Compiling & Running Code...</div>
-                        </div>
-                      ) : (
-                        <div className="lc-result-box">
-                          <div className="lc-result-status-row">
-                            <span className={`lc-result-status-badge ${runResult.status.toLowerCase()}`}>
-                              {runResult.status}
-                            </span>
-                            <span className="lc-result-runtime">
-                              Local execution results
-                            </span>
-                          </div>
-
-                          {runResult.outputs[0] && (
-                            <div>
-                              <div className="lc-result-data-row">
-                                <div className="lc-result-data-label">Input Tested</div>
-                                <div className="lc-result-data-value">{runResult.outputs[0].input}</div>
-                              </div>
-                              <div className="lc-result-data-row">
-                                <div className="lc-result-data-label">Output</div>
-                                <div className="lc-result-data-value">{runResult.outputs[0].output}</div>
-                              </div>
-                              <div className="lc-result-data-row">
-                                <div className="lc-result-data-label">Expected Sample Output</div>
-                                <div className="lc-result-data-value">{runResult.outputs[0].expected}</div>
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-
-                <div className="pe-console-footer">
-                  <button
-                    className="lc-btn-add-tc"
-                    onClick={() => {
-                      setCustomInput(selectedProb.sampleInput || '');
-                      toast.success('Reset inputs');
-                    }}
-                  >
-                    🔄 Reset Input
-                  </button>
-                  <button className="lc-btn-run" style={{ padding: '3px 10px' }} onClick={handleRunCode}>
-                    Run Code
-                  </button>
-                </div>
-              </div>
+            <div style={{ height: '400px', marginTop: '12px' }}>
+              <Editor
+                height="100%"
+                language={MONACO_LANGS[selectedSubForView.language] || 'cpp'}
+                value={selectedSubForView.code}
+                options={{
+                  readOnly: true,
+                  fontSize: 13,
+                  minimap: { enabled: false }
+                }}
+              />
             </div>
-          )}
-        </div>
-      ) : (
-        // Empty state landing select problem screen
-        <div className="pe-welcome-container">
-          <div className="text-6xl animate-bounce">🧩</div>
-          <h2 className="pe-welcome-title">Select a Practice Problem</h2>
-          <p className="pe-welcome-desc">
-            Choose a coding problem from the Browser list to start practicing. View detailed statements, ask AI hints, or generate explanations.
-          </p>
-          <div className="flex gap-4">
-            <button
-              className="bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2 px-6 rounded-md text-sm transition-colors"
-              onClick={() => setIsDrawerOpen(true)}
-            >
-              Browse Problems List
-            </button>
-
-            {dailyChallenge?.problemId && (
-              <div
-                className="pe-welcome-daily text-left flex flex-col justify-center"
-                onClick={() => selectProblem(dailyChallenge.problemId)}
-              >
-                <div className="text-[10px] text-indigo-400 font-bold uppercase">⚡ Daily Challenge</div>
-                <div className="text-xs font-semibold text-white">{dailyChallenge.problemId.title}</div>
-              </div>
-            )}
           </div>
         </div>
       )}
