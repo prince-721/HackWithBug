@@ -98,4 +98,16 @@ router.get('/:contestId/:userId', auth, facultyOnly, async (req, res) => {
   }
 });
 
+const { analyzeBehavioralIntegrity } = require('../utils/behavioralIntegrityAnalyzer');
+
+// POST /api/proctoring/analyze-behavior — analyze telemetry for hidden AI assistant usage
+router.post('/analyze-behavior', auth, async (req, res) => {
+  try {
+    const result = analyzeBehavioralIntegrity(req.body);
+    res.json(result);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 module.exports = router;

@@ -49,9 +49,9 @@ export default function Landing() {
 
       {/* HERO */}
       <section className="l-hero">
-        <div className="l-badge">✨ AI-assisted · VGEC CE Dept · Parul University</div>
+        <div className="l-badge">✨ AI-Assisted Competitive Programming Platform</div>
         <h1>Code. Compete.<br /><span className="l-accent">Climb.</span></h1>
-        <p>The competitive programming platform for Parul University students — live judge, AI feedback, Codolio-style profiles, and proctored faculty contests.</p>
+        <p>The premier competitive programming platform — live judge, AI feedback, Codolio-style profiles, and proctored contests.</p>
         <div className="l-hero-btns">
           <Link to="/login"><button className="btn btn-primary" style={{padding:'12px 28px',fontSize:'15px'}}>Start coding for free →</button></Link>
           <Link to="/login"><button className="btn btn-ghost" style={{padding:'12px 28px',fontSize:'15px'}}>Host a contest</button></Link>
@@ -91,14 +91,14 @@ export default function Landing() {
       <section className="l-cta" id="login">
         <div className="l-cta-card">
           <h2>Ready to compete?</h2>
-          <p>Join with your Parul University email and start solving in under 60 seconds.</p>
-          <Link to="/login"><button className="btn btn-primary" style={{padding:'12px 32px',fontSize:'15px',marginTop:'1rem'}}>Sign in with Parul email →</button></Link>
-          <div className="l-cta-note">🔒 Only @paruluniversity.ac.in emails accepted</div>
+          <p>Join and start solving in under 60 seconds.</p>
+          <Link to="/login"><button className="btn btn-primary" style={{padding:'12px 32px',fontSize:'15px',marginTop:'1rem'}}>Sign in to Code →</button></Link>
+          <div className="l-cta-note">🔒 Student & Faculty Verified Access</div>
         </div>
       </section>
 
       <footer className="l-footer">
-        <div><strong style={{color:'var(--purple)'}}>hackwithbug</strong> · VGEC CE Department · Parul University · 2025</div>
+        <div><strong style={{color:'var(--purple)'}}>hackwithbug</strong> · Next-Gen Competitive Programming · 2026</div>
         <div className="l-footer-links"><Link to="/login">Sign in</Link></div>
       </footer>
     </div>

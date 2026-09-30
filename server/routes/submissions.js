@@ -3,33 +3,10 @@ const express = require('express');
 const { Submission, Problem, User, Contest } = require('../db');
 const { auth } = require('../middleware/auth');
 const { createNotification } = require('./notifications');
+const { judgeAllTestCases, executeTestCase } = require('../utils/judge');
 const router = express.Router();
 
-const executePiston = async (code, language, stdin) => {
-  const langMap = {
-    'cpp17': { language: 'cpp', version: '*' },
-    'python3': { language: 'python', version: '*' },
-    'java17': { language: 'java', version: '*' },
-    'c': { language: 'c', version: '*' }
-  };
-  const target = langMap[language] || { language, version: '*' };
-  try {
-    const response = await fetch('https://emkc.org/api/v2/piston/execute', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        language: target.language, version: target.version,
-        files: [{ name: 'main', content: code }],
-        stdin: stdin || ''
-      })
-    });
-    if (!response.ok) throw new Error(`Piston API status: ${response.statusText}`);
-    return await response.json();
-  } catch (err) {
-    console.error('Piston execution failed:', err.message);
-    return null;
-  }
-};
+// All code execution (practice + contest) uses the unified Wandbox-based judge
 
 // GET /api/submissions
 router.get('/', auth, async (req, res) => {
@@ -64,8 +41,6 @@ router.get('/', auth, async (req, res) => {
     res.status(500).json({ error: e.message });
   }
 });
-
-const { judgeAllTestCases, executeTestCase } = require('../utils/judge');
 
 // POST /api/submissions/run — Quick Run Code against sample or custom input
 router.post('/run', auth, async (req, res) => {

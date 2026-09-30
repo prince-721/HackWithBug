@@ -31,6 +31,43 @@ function normalizeOutput(str) {
 }
 
 /**
+ * Preprocesses stdin to convert LeetCode-style array notation into
+ * a Scanner/cin-friendly format (space-separated values with length prefix).
+ * e.g. [-1,0,1,2,-1,-4] → 6\n-1 0 1 2 -1 -4
+ * e.g. ["abc","def"] → 2\nabc def
+ * Leaves non-array inputs untouched.
+ */
+function preprocessStdin(stdin) {
+  if (!stdin || !stdin.trim()) return stdin || '';
+  const lines = stdin.trim().split('\n');
+  const processed = [];
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+    // Detect LeetCode-style array: starts with [ and ends with ]
+    if (line.startsWith('[') && line.endsWith(']')) {
+      const inner = line.slice(1, -1).trim();
+      if (inner === '') {
+        // Empty array
+        processed.push('0');
+      } else if (inner.startsWith('[')) {
+        // Nested array like [[1,2],[3,4]] — keep as-is, student must parse
+        processed.push(line);
+      } else {
+        // Flat array like [-1,0,1,2,-1,-4] or ["hello","world"]
+        const elements = inner.split(',').map(s => s.trim().replace(/^"|"$/g, '').replace(/^'|'$/g, ''));
+        processed.push(String(elements.length));
+        processed.push(elements.join(' '));
+      }
+    } else {
+      // Non-array input — pass through unchanged
+      processed.push(line);
+    }
+  }
+  return processed.join('\n');
+}
+
+/**
  * Wraps/fixes code so it can compile and run correctly
  */
 function prepareSourceCode(rawCode, language) {
@@ -87,10 +124,13 @@ async function executeTestCase(code, language, stdin = '', expectedOutput = '', 
   const target = WANDBOX_COMPILER_MAP[lang] || { compiler: 'gcc-head', options: '-std=c++17' };
   const preparedCode = prepareSourceCode(code, language);
 
+  // Preprocess LeetCode-style array inputs into Scanner/cin-friendly format
+  const processedStdin = preprocessStdin(stdin);
+
   const payload = {
     compiler: target.compiler,
     code: preparedCode,
-    stdin: stdin || '',
+    stdin: processedStdin,
     ...(target.options ? { options: target.options } : {})
   };
 
@@ -243,5 +283,6 @@ async function judgeAllTestCases(code, language, testCases = [], timeLimit = 2.0
 module.exports = {
   executeTestCase,
   judgeAllTestCases,
-  normalizeOutput
+  normalizeOutput,
+  preprocessStdin
 };

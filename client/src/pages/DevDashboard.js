@@ -217,7 +217,7 @@ export default function DevDashboard() {
           <div>
             <h1 style={{ fontSize: '20px', fontWeight: 800 }}>Good morning, {user.name} 👋</h1>
             <div style={{ fontSize: '13px', color: 'var(--text-3)', marginTop: '2px' }}>
-              VGEC CE Department · {contests.length} contests · {leaderboard.length} students
+              Faculty Portal · {contests.length} contests · {leaderboard.length} students
             </div>
           </div>
           <div style={{ display: 'flex', gap: '8px' }}>

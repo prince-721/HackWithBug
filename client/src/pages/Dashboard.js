@@ -210,7 +210,7 @@ export default function Dashboard() {
           <div className="ds-rating-badge" style={{ borderColor: `${ratingTier.color}40`, color: ratingTier.color }}>
             ⭐ {ratingTier.title} ({user.rating || 1200})
           </div>
-          <div className="ds-meta">Parul University · CE Sem {user.semester || 5}</div>
+          <div className="ds-meta">B.Tech CE · Semester {user.semester || 6}</div>
           <Link to={`/profile/${user.enrollment}`} style={{ display: 'block', marginTop: '12px' }}>
             <button className="btn btn-ghost btn-sm" style={{ width: '100%' }}>
               View Public Portfolio ↗

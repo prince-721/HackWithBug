@@ -75,7 +75,7 @@ export default function Leaderboard() {
             <span>Competitive Leaderboard</span>
           </h1>
           <p style={{ color: 'var(--text-3)', fontSize: '13px', marginTop: '2px' }}>
-            Top student competitive programmers across Parul University CE department
+            Top student competitive programmers across the platform
           </p>
         </div>
 
