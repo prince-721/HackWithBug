@@ -115,7 +115,7 @@ flowchart TB
 
     subgraph ExternalTier ["External AI & Sandbox Engines"]
         Groq[Groq Cloud API - LLaMA 3.3 70B]
-        Piston[Piston Code Execution Sandbox]
+        Wandbox[Wandbox Cloud Compiler & Sandbox]
     end
 
     Client -->|HTTPS REST| AuthMid
@@ -132,7 +132,7 @@ flowchart TB
     SubRouter <--> Mongo
     TypingRouter <--> Mongo
 
-    SubRouter -->|Execute Code| Piston
+    SubRouter -->|Execute Code| Wandbox
     AIRouter -->|Validate / Hint / Review / Plag| Groq
     SubRouter -.->|Broadcast AC Event| SocketServer
     SocketServer -.->|leaderboard-updated| SocketClient
@@ -199,7 +199,7 @@ flowchart TD
     subgraph CodeLoop ["Coding & Submission Workflow"]
         Type[Student Types Code in Monaco] --> LiveTelemetry[Compute Live WPM, Keys, Idle Time]
         Submit[Student Clicks Submit] --> PostSub[POST /api/submissions with Telemetry]
-        PostSub --> Exec[Piston Sandbox Runs Test Cases]
+        PostSub --> Exec[Wandbox Sandbox Runs Test Cases]
         Exec --> VerdictCheck{Verdict == AC?}
         
         VerdictCheck -- Yes --> ScoreUpdate[Update Score & Penalty in DB]
@@ -275,7 +275,7 @@ flowchart LR
 | **Backend** | Node.js, Express.js, Socket.IO, JWT (JSON Web Tokens), Bcryptjs, Helmet, Morgan, Express-Rate-Limit |
 | **Database** | MongoDB Atlas (Cloud Database), Mongoose ODM |
 | **AI Intelligence** | Groq Cloud SDK (`llama-3.3-70b-versatile`) |
-| **Execution Engine** | Piston Code Execution API (C++17, Python 3, Java 17, C, JavaScript) |
+| **Execution Engine** | Wandbox Cloud Compiler & Sandbox (C++17, Python 3, Java 17, C, JavaScript) |
 | **Styling** | Modern CSS Design System, Responsive Glassmorphism, CSS Custom Properties |
 
 ---
